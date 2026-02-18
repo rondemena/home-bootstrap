@@ -131,11 +131,11 @@ code/
 │   │       ├── gitlab.yaml              # Primary: source control
 │   │       ├── jenkins.yaml             # Primary: CI/CD
 │   │       ├── harbor.yaml              # Primary: registry
+│   │       ├── minio.yaml              # State backend (S3)
 │   │       ├── gitea.yaml               # Secondary: lightweight SCM
 │   │       ├── woodpecker.yaml          # Secondary: lightweight CI
 │   │       ├── monitoring.yaml
-│   │       ├── logging.yaml
-│   │       └── sealed-secrets.yaml
+│   │       └── logging.yaml
 │   ├── infrastructure/
 │   │   ├── metallb/
 │   │   │   ├── values.yaml
@@ -151,16 +151,20 @@ code/
 │       ├── gitlab/                      # Primary
 │       │   └── values.yaml
 │       ├── jenkins/                     # Primary
-│       │   └── values.yaml
+│       │   ├── values.yaml
+│       │   └── sealed-secrets/          # SealedSecret templates
 │       ├── harbor/                      # Primary
+│       │   └── values.yaml
+│       ├── minio/                       # State backend
 │       │   └── values.yaml
 │       ├── gitea/                       # Secondary
 │       │   └── values.yaml
 │       ├── woodpecker/                  # Secondary
-│       │   └── values.yaml
+│       │   ├── values.yaml
+│       │   └── sealed-secrets/          # SealedSecret templates
 │       ├── monitoring/
 │       │   ├── values.yaml
-│       │   └── dashboards/
+│       │   └── dashboards/              # Grafana dashboard ConfigMaps
 │       └── logging/
 │           └── values.yaml
 ├── scripts/
@@ -170,14 +174,18 @@ code/
 
 tests/
 ├── ansible/
-│   ├── lint/
-│   └── molecule/
+│   ├── lint/                            # Playbook lint assertions
+│   └── molecule/                        # Role molecule tests
 ├── tofu/
 │   └── integration/
 ├── k8s/
-│   └── smoke/
+│   └── smoke/                           # Cluster, infra, SDLC health
 └── e2e/
-    └── test_full_stack.sh
+    ├── test_ilo_provision.sh
+    ├── test_vm_provision.sh
+    ├── test_ci_pipeline.sh
+    ├── test_smoke_pipeline.sh
+    └── test_observability.sh
 ```
 
 **Structure Decision**: Multi-layer infrastructure project with clear

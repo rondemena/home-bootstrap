@@ -64,10 +64,26 @@ pipeline {
         }
 
         stage('Test Gate') {
-            steps {
-                dir("${TOFU_DIR}/modules/proxmox-vm") {
-                    sh 'tofu init -backend=false'
-                    sh 'tofu test'
+            parallel {
+                stage('tofu test') {
+                    steps {
+                        dir("${TOFU_DIR}/modules/proxmox-vm") {
+                            sh 'tofu init -backend=false'
+                            sh 'tofu test'
+                        }
+                    }
+                }
+                stage('ansible syntax-check') {
+                    steps {
+                        dir("${ANSIBLE_DIR}") {
+                            sh 'ansible-playbook --syntax-check playbooks/*.yml'
+                        }
+                    }
+                }
+                stage('ansible lint tests') {
+                    steps {
+                        sh 'ansible-playbook --syntax-check tests/ansible/lint/*.yml'
+                    }
                 }
             }
         }

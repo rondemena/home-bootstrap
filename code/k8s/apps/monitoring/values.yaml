@@ -185,10 +185,8 @@ alertmanager:
     global:
       resolve_timeout: 5m
 
-    # -- Route tree: all alerts go to null receiver by default
-    # In a home lab without external notification targets, alerts are
-    # visible in the Alertmanager UI and Grafana. Add a webhook or
-    # email receiver when an external target becomes available.
+    # -- Route tree: critical/warning alerts go to webhook receiver,
+    # Watchdog (dead man's switch) goes to null.
     route:
       group_by:
         - namespace
@@ -197,7 +195,7 @@ alertmanager:
       group_wait: 30s
       group_interval: 5m
       repeat_interval: 12h
-      receiver: "null"
+      receiver: webhook
       routes:
         # -- Dead man's switch: always-firing alert to verify pipeline
         - match:
@@ -206,8 +204,19 @@ alertmanager:
           repeat_interval: 1m
 
     receivers:
-      # -- Null receiver (alerts visible in UI only)
+      # -- Null receiver (Watchdog only)
       - name: "null"
+      # -- Webhook receiver for alert notifications
+      # Configure ALERTMANAGER_WEBHOOK_URL via Sealed Secret or update
+      # the URL below. Compatible with: ntfy, Gotify, Slack incoming
+      # webhooks, or any HTTP endpoint accepting Alertmanager payloads.
+      # Default: ntfy topic at ntfy.apps.home.lab/alerts (deploy ntfy
+      # as a lightweight k8s service, or use https://ntfy.sh/your-topic)
+      - name: webhook
+        webhook_configs:
+          - url: "http://ntfy.apps.home.lab/alerts"
+            send_resolved: true
+            max_alerts: 10
 
     # -- Inhibition rules to reduce alert noise
     inhibit_rules:
