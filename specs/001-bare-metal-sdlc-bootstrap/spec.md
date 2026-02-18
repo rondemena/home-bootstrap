@@ -186,6 +186,11 @@ checking all test assertions pass.
 - How does the system handle network partition between k3s nodes?
   MetalLB and Longhorn MUST be configured with appropriate timeouts and
   the monitoring stack MUST alert on node NotReady.
+- How is the Proxmox ISO served to iLO? The operator MUST stand up a
+  temporary HTTP server (nginx/apache) on the local network serving
+  the ISO at the URL configured in `proxmox_iso_url`. The playbook
+  MUST validate the URL is reachable before attempting virtual media
+  mount.
 
 ## Clarifications
 
@@ -197,9 +202,14 @@ checking all test assertions pass.
 - Q: Server placement and roles? → A: DL380g10 is primary Proxmox host for k3s VMs. Both servers trunked to VLANs 2-5. iLO management on VLAN 5 (192.168.5.0/24).
 - Q: Is Proxmox already installed? → A: DL380g10 has Proxmox VE already. DL360g9 does not (needs provisioning or different role). US1 iLO provisioning primarily needed for DL360g9 (iLO 4).
 - Q: Disk/storage configuration? → A: DL380g10 uses hardware RAID controller (current Proxmox host). DL360g9 storage role TBD (80+ TB raw capacity available).
-- Q: DNS setup? → A: NextDNS for external resolution. UniFi internal DNS today. Desires a local DNS service for lab functions, distributable via DHCP to lab subnets. No existing local DNS server (CoreDNS or Pi-hole) in place yet.
+- Q: DNS setup? → A: NextDNS for external resolution. UniFi internal DNS today. Local DNS via CoreDNS on k3s (MetalLB IP), serving `*.lab.demena.net` wildcard, distributable via DHCP to lab subnets.
 - Q: Existing VMs/services? → A: DL380 has VMs that can be flushed for a clean start. Pre-requisite: export Kimai time tracking data before teardown. Otherwise clean slate.
 - Q: Who uses the SDLC toolchain? → A: Primarily solo operator/developer. Also used as a learning and demo platform for others occasionally. No multi-tenancy or SSO required initially.
+- Q: DL360g9 role? → A: Standalone NAS (TrueNAS or similar), not part of bootstrap automation. Provisioned and managed separately.
+- Q: Backup strategy for persistent SDLC data? → A: Longhorn S3 backups to DL360g9 NAS (off-node, higher durability). S3 endpoint on NAS via MinIO gateway or TrueNAS S3 service.
+- Q: How is the Proxmox ISO served for iLO virtual media? → A: Temporary IP-based web server (nginx/apache) on the local network. Operator stands up a lightweight HTTP server serving the ISO before running iLO provisioning. Not a permanent service.
+- Q: Single k3s server or HA? → A: 3-server HA with embedded etcd (k3s-server-01/02/03) plus 2 agent workers. k3s runs as VMs on Proxmox. Goal is practice and exposure to proper manager/worker node separation.
+- Q: Local DNS and ingress domain? → A: CoreDNS on k3s via MetalLB serving wildcard `*.${INGRESS_DOMAIN}` → Traefik LB IP, DHCP-distributable to lab VLANs. Domain is configurable via `.env` file (gitignored); default `lab.demena.net`. A `.env.example` documents all required variables so others can fork and customize. Code MUST NOT hardcode the domain — all references use variables sourced from `.env`.
 - Q: SDLC tool preferences and MVP scope? → A: **DECIDED** — Dual-stack approach:
   - **Primary SDLC**: GitLab CE (MIT) + Jenkins (MIT) + Harbor (Apache 2.0) + ArgoCD (Apache 2.0) + full observability
   - **Secondary/learning**: Gitea (MIT) + Woodpecker CI (Apache 2.0) deployed alongside for exposure to lightweight cloud-native alternatives
@@ -218,8 +228,8 @@ checking all test assertions pass.
   bpg/proxmox provider, with cloud-init for OS-level configuration
 - **FR-004**: System MUST configure Proxmox storage pools (ZFS or LVM)
   and networking (bridges, VLANs) via OpenTofu or Ansible
-- **FR-005**: System MUST deploy k3s in a multi-node configuration
-  (1 server + N agents) using Ansible
+- **FR-005**: System MUST deploy k3s in an HA multi-node configuration
+  (3 server nodes with embedded etcd + 2 agent workers) using Ansible
 - **FR-006**: System MUST deploy cluster infrastructure services:
   MetalLB (load balancing), Longhorn (storage), Traefik (ingress),
   cert-manager (TLS)
@@ -246,22 +256,35 @@ checking all test assertions pass.
   component inventory (Constitution Principle II)
 - **FR-015**: System MUST include integration tests validating
   cross-layer connectivity (iLO → Proxmox → k3s → services)
+- **FR-016**: Longhorn MUST be configured with scheduled S3 backups
+  targeting the DL360g9 NAS (off-node) for persistent volume data
+  (GitLab repos, Harbor images, Jenkins configs, Prometheus metrics)
+- **FR-017**: System MUST deploy CoreDNS on k3s exposed via MetalLB
+  serving wildcard `*.lab.demena.net` resolving to the Traefik
+  LoadBalancer IP, distributable to lab VLANs via DHCP
+- **FR-018**: All service ingress hostnames MUST use the
+  `*.lab.demena.net` domain (e.g., `gitlab.lab.demena.net`,
+  `jenkins.lab.demena.net`)
 
 ### Key Entities
 
 - **Server**: Physical HPE server with iLO endpoint; 2 servers:
-  DL380 Gen10 (iLO 5, 40c/768GB/8x1.8TB) and DL360 Gen9
-  (iLO 4, 24c/128GB/8x4TB+4x12TB). Attributes: iLO IP, model,
-  iLO generation, firmware version, desired BIOS settings.
-  NOTE: iLO 4 (DL360g9) may require iLO Advanced license for
-  scripted virtual media operations
+  DL380 Gen10 (iLO 5, 40c/768GB/8x1.8TB, primary — runs all k3s VMs)
+  and DL360 Gen9 (iLO 4, 24c/128GB/80+TB, standalone NAS — outside
+  bootstrap scope, managed separately as TrueNAS or similar).
+  Attributes: iLO IP, model, iLO generation, firmware version,
+  desired BIOS settings. NOTE: iLO 4 (DL360g9) provisioning via
+  this bootstrap is optional; iLO playbook retained for reference
+  but DL360g9 is not part of the automated bootstrap chain
 - **Hypervisor**: Proxmox VE instance running on a Server; attributes:
   hostname, management IP, API credentials, storage pools, networks
 - **VM**: Virtual machine on a Hypervisor; attributes: vmid, hostname,
   CPU, memory, disk, network, cloud-init config, role (k3s-server,
   k3s-agent, utility)
-- **Cluster**: k3s Kubernetes cluster; attributes: server endpoint,
-  join token, node list, installed add-ons
+- **Cluster**: k3s Kubernetes cluster in HA configuration (3 server
+  nodes with embedded etcd, 2 agent workers); attributes: server
+  endpoint (load-balanced or first server), join token, node list,
+  installed add-ons, ingress domain `*.lab.demena.net`
 - **Service**: SDLC application deployed on Cluster; attributes: name,
   Helm chart, namespace, ingress hostname, health endpoint
 
