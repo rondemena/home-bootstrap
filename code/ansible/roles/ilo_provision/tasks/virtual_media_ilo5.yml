@@ -1,0 +1,55 @@
+---
+# Virtual Media mounting for iLO 5 (DL380g10)
+# iLO 5 Standard license supports scripted virtual media
+
+- name: "iLO 5: Mount Proxmox ISO via virtual media"
+  community.general.redfish_command:
+    baseuri: "{{ ilo_host }}"
+    username: "{{ ilo_user }}"
+    password: "{{ ilo_pass }}"
+    category: Manager
+    command: VirtualMediaInsert
+    virtual_media:
+      image_url: "{{ proxmox_iso_url }}"
+      media_types:
+        - CD
+  delegate_to: localhost
+
+- name: "iLO 5: Set one-time boot to CD"
+  community.general.redfish_command:
+    baseuri: "{{ ilo_host }}"
+    username: "{{ ilo_user }}"
+    password: "{{ ilo_pass }}"
+    category: Systems
+    command: SetOneTimeBoot
+    bootdevice: Cd
+  delegate_to: localhost
+
+- name: "iLO 5: Power cycle server"
+  community.general.redfish_command:
+    baseuri: "{{ ilo_host }}"
+    username: "{{ ilo_user }}"
+    password: "{{ ilo_pass }}"
+    category: Systems
+    command: PowerForceRestart
+  delegate_to: localhost
+
+- name: "iLO 5: Wait for Proxmox installation to complete"
+  ansible.builtin.wait_for:
+    host: "{{ ilo_host | regex_replace('192\\.168\\.5\\.', '192.168.2.') }}"
+    port: 22
+    delay: "{{ ilo_ssh_check_delay }}"
+    timeout: "{{ ilo_proxmox_install_timeout }}"
+  delegate_to: localhost
+
+- name: "iLO 5: Eject virtual media"
+  community.general.redfish_command:
+    baseuri: "{{ ilo_host }}"
+    username: "{{ ilo_user }}"
+    password: "{{ ilo_pass }}"
+    category: Manager
+    command: VirtualMediaEject
+    virtual_media:
+      media_types:
+        - CD
+  delegate_to: localhost

@@ -1,0 +1,37 @@
+---
+# BIOS configuration via Redfish (idempotent)
+
+- name: Get current BIOS attributes
+  community.general.redfish_info:
+    baseuri: "{{ ilo_host }}"
+    username: "{{ ilo_user }}"
+    password: "{{ ilo_pass }}"
+    category: Systems
+    command: GetBiosAttributes
+  register: current_bios
+  delegate_to: localhost
+
+- name: Determine BIOS changes needed
+  ansible.builtin.set_fact:
+    bios_changes_needed: >-
+      {{
+        ilo_bios_settings | dict2items
+        | selectattr('value', '!=',
+            current_bios.redfish_facts.bios_attribute.entries[0][1][item.key] | default(''))
+        | list
+      }}
+  vars:
+    item: "{{ ilo_bios_settings | dict2items | first }}"
+
+- name: Apply BIOS settings if changes needed
+  community.general.redfish_config:
+    baseuri: "{{ ilo_host }}"
+    username: "{{ ilo_user }}"
+    password: "{{ ilo_pass }}"
+    category: Systems
+    command: SetBiosAttributes
+    bios_attributes: "{{ ilo_bios_settings }}"
+  register: bios_result
+  delegate_to: localhost
+  when: bios_changes_needed | length > 0
+  notify: reboot for bios changes

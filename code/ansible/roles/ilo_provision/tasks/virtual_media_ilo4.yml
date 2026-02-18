@@ -1,0 +1,74 @@
+---
+# Virtual Media mounting for iLO 4 (DL360g9)
+# iLO 4 REQUIRES Advanced license for scripted virtual media
+
+- name: "iLO 4: Check iLO Advanced license"
+  when: not (ilo_advanced_license | default(false))
+  block:
+    - name: "iLO 4: Warn about missing Advanced license"
+      ansible.builtin.debug:
+        msg: >-
+          WARNING: iLO 4 on {{ inventory_hostname }} does not have Advanced
+          license. Scripted virtual media requires iLO Advanced license.
+          Please mount the Proxmox ISO manually via the iLO web console
+          at https://{{ ilo_host }}/ and reboot to CD.
+          After Proxmox is installed, re-run this playbook.
+
+    - name: "iLO 4: Fail without Advanced license"
+      ansible.builtin.fail:
+        msg: >-
+          iLO 4 Advanced license required for automated provisioning.
+          Set ilo_advanced_license: true in inventory after obtaining license,
+          or install Proxmox manually and set proxmox_already_installed: true.
+
+- name: "iLO 4: Mount Proxmox ISO via virtual media (Advanced license)"
+  community.general.redfish_command:
+    baseuri: "{{ ilo_host }}"
+    username: "{{ ilo_user }}"
+    password: "{{ ilo_pass }}"
+    category: Manager
+    command: VirtualMediaInsert
+    virtual_media:
+      image_url: "{{ proxmox_iso_url }}"
+      media_types:
+        - CD
+  delegate_to: localhost
+
+- name: "iLO 4: Set one-time boot to CD"
+  community.general.redfish_command:
+    baseuri: "{{ ilo_host }}"
+    username: "{{ ilo_user }}"
+    password: "{{ ilo_pass }}"
+    category: Systems
+    command: SetOneTimeBoot
+    bootdevice: Cd
+  delegate_to: localhost
+
+- name: "iLO 4: Power cycle server"
+  community.general.redfish_command:
+    baseuri: "{{ ilo_host }}"
+    username: "{{ ilo_user }}"
+    password: "{{ ilo_pass }}"
+    category: Systems
+    command: PowerForceRestart
+  delegate_to: localhost
+
+- name: "iLO 4: Wait for Proxmox installation to complete"
+  ansible.builtin.wait_for:
+    host: "{{ ilo_host | regex_replace('192\\.168\\.5\\.', '192.168.2.') }}"
+    port: 22
+    delay: "{{ ilo_ssh_check_delay }}"
+    timeout: "{{ ilo_proxmox_install_timeout }}"
+  delegate_to: localhost
+
+- name: "iLO 4: Eject virtual media"
+  community.general.redfish_command:
+    baseuri: "{{ ilo_host }}"
+    username: "{{ ilo_user }}"
+    password: "{{ ilo_pass }}"
+    category: Manager
+    command: VirtualMediaEject
+    virtual_media:
+      media_types:
+        - CD
+  delegate_to: localhost

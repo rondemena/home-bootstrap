@@ -1,0 +1,24 @@
+---
+# Sealed Secrets Helm values for home lab k3s cluster
+# Chart: sealed-secrets/sealed-secrets
+# Namespace: kube-system
+#
+# Minimal configuration. The controller runs in kube-system and manages
+# decryption of SealedSecret resources into regular Kubernetes Secrets.
+# Use `kubeseal` CLI on the workstation to encrypt secrets before committing.
+
+# Controller name (used by kubeseal to discover the service)
+fullnameOverride: sealed-secrets-controller
+
+# Single replica for home lab
+controller:
+  replicas: 1
+
+# Resource limits
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 100m
+    memory: 128Mi

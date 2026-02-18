@@ -1,0 +1,20 @@
+---
+# Playbook: Cloud-Init Template Creation
+# Target: proxmox group
+# Purpose: Download Ubuntu cloud image and create VM template (VMID 9000)
+#
+# Usage: ansible-playbook -i inventory/hosts.yml playbooks/02-cloud-image-template.yml
+
+- name: Create Cloud-Init VM Template
+  hosts: proxmox
+  gather_facts: true
+
+  pre_tasks:
+    - name: Verify Proxmox VE is available
+      ansible.builtin.command:
+        cmd: pveversion
+      register: pve_version
+      changed_when: false
+
+  roles:
+    - role: cloud_image_template

@@ -1,0 +1,21 @@
+---
+# ansible-lint configuration
+# See: https://ansible.readthedocs.io/projects/lint/configuring/
+
+profile: production
+
+exclude_paths:
+  - .cache/
+  - .github/
+  - tests/
+  - code/ansible/roles/*/molecule/
+
+skip_list:
+  - yaml[truthy]  # Allow 'yes'/'no' in YAML
+  - name[casing]  # Allow flexible task naming
+
+warn_list:
+  - experimental
+
+# Use project-local ansible.cfg
+project_dir: code/ansible

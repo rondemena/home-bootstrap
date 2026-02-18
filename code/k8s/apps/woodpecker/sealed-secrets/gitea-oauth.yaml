@@ -1,0 +1,78 @@
+# =============================================================================
+# SealedSecret TEMPLATE: Gitea OAuth2 Credentials for Woodpecker CI
+# Task: T069 - Woodpecker->Gitea OAuth integration
+# =============================================================================
+#
+# This is a TEMPLATE file. The encryptedData values are placeholders and
+# MUST be replaced with actual kubeseal output before applying to the cluster.
+#
+# Purpose:
+#   Woodpecker CI uses Gitea OAuth2 for user authentication and
+#   repository discovery. Users log in to Woodpecker via Gitea, and
+#   Woodpecker uses the OAuth credentials to list and clone repositories.
+#
+# The Woodpecker Helm values at code/k8s/apps/woodpecker/values.yaml
+# reference this secret via extraSecretNamesForEnvFrom:
+#   - woodpecker-gitea-credentials
+#
+# The secret must contain these environment variable keys:
+#   - WOODPECKER_GITEA_CLIENT: The OAuth2 application client ID
+#   - WOODPECKER_GITEA_SECRET: The OAuth2 application client secret
+#
+# How to create the Gitea OAuth2 Application:
+#
+#   1. Log in to Gitea at https://gitea.apps.home.lab as an admin
+#   2. Navigate to Site Administration > Applications
+#      (or User Settings > Applications for user-scoped OAuth)
+#   3. Create a new OAuth2 application:
+#      - Application Name: Woodpecker CI
+#      - Redirect URI: https://ci.apps.home.lab/authorize
+#   4. Copy the Client ID and Client Secret
+#
+# How to create and seal this secret:
+#
+#   1. Create the Gitea OAuth2 application (see above)
+#
+#   2. Generate the plaintext Kubernetes secret:
+#      kubectl create secret generic woodpecker-gitea-credentials \
+#        --from-literal=WOODPECKER_GITEA_CLIENT='<gitea-oauth-client-id>' \
+#        --from-literal=WOODPECKER_GITEA_SECRET='<gitea-oauth-client-secret>' \
+#        --namespace=woodpecker \
+#        --dry-run=client -o yaml > /tmp/gitea-oauth.yaml
+#
+#   3. Seal it with kubeseal:
+#      kubeseal --format=yaml \
+#        --controller-name=sealed-secrets \
+#        --controller-namespace=kube-system \
+#        < /tmp/gitea-oauth.yaml \
+#        > code/k8s/apps/woodpecker/sealed-secrets/gitea-oauth.yaml
+#
+#   4. Delete the plaintext file:
+#      rm /tmp/gitea-oauth.yaml
+#
+#   5. Commit this file to the repository.
+#
+# =============================================================================
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: woodpecker-gitea-credentials
+  namespace: woodpecker
+  labels:
+    app.kubernetes.io/part-of: woodpecker
+    app.kubernetes.io/component: integration
+    integration: gitea
+spec:
+  template:
+    metadata:
+      name: woodpecker-gitea-credentials
+      namespace: woodpecker
+      labels:
+        app.kubernetes.io/part-of: woodpecker
+        app.kubernetes.io/component: integration
+        integration: gitea
+  encryptedData:
+    # REPLACE these values with the output of kubeseal (see instructions above)
+    WOODPECKER_GITEA_CLIENT: "REPLACE_WITH_KUBESEAL_OUTPUT"
+    WOODPECKER_GITEA_SECRET: "REPLACE_WITH_KUBESEAL_OUTPUT"

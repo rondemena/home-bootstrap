@@ -1,0 +1,30 @@
+---
+# Lint validation test for k3s playbooks (US3)
+# Run: ansible-lint code/ansible/playbooks/03-k3s-install.yml
+#      ansible-lint code/ansible/playbooks/04-k3s-post-install.yml
+
+- name: "Lint target: k3s playbooks"
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Verify k3s install playbook exists
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/../../code/ansible/playbooks/03-k3s-install.yml"
+      register: k3s_install_playbook
+
+    - name: Assert k3s install playbook is present
+      ansible.builtin.assert:
+        that:
+          - k3s_install_playbook.stat.exists
+        fail_msg: "k3s install playbook not found at code/ansible/playbooks/03-k3s-install.yml"
+
+    - name: Verify k3s post-install playbook exists
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/../../code/ansible/playbooks/04-k3s-post-install.yml"
+      register: k3s_post_install_playbook
+
+    - name: Assert k3s post-install playbook is present
+      ansible.builtin.assert:
+        that:
+          - k3s_post_install_playbook.stat.exists
+        fail_msg: "k3s post-install playbook not found at code/ansible/playbooks/04-k3s-post-install.yml"

@@ -1,0 +1,14 @@
+---
+pve_api_port: 8006
+pve_api_verify_ssl: false
+pve_default_storage: local
+pve_no_subscription_repo: true
+
+# Network bridge configuration
+pve_network_bridges:
+  - name: vmbr0
+    ports: "eno1"
+    cidr: "192.168.2.11/24"
+    gateway: "192.168.2.1"
+    vlan_aware: true
+    comment: "Primary bridge - VLAN-aware trunk (VLANs 2-5)"

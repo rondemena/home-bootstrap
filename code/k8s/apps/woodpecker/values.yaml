@@ -1,0 +1,124 @@
+# =============================================================================
+# Woodpecker CI Helm Values
+# Chart: woodpecker/woodpecker
+# Repository: https://woodpecker-ci.org/
+# Task: T063 - Secondary SDLC stack: lightweight CI/CD
+# =============================================================================
+#
+# Deployment notes:
+#   - Server ingress at ci.apps.home.lab via Traefik
+#   - Gitea OAuth integration for authentication and repo access
+#   - Agent deployment with 2 replicas for parallel builds
+#   - Pipeline volumes on Longhorn for build workspace persistence
+#   - Shared secret for server-agent communication
+# =============================================================================
+
+# =============================================================================
+# Woodpecker Server
+# =============================================================================
+server:
+  # -- Server environment variables for Gitea integration
+  # These reference Kubernetes secrets for sensitive values.
+  # Create secrets before deployment:
+  #   kubectl create secret generic woodpecker-gitea-credentials \
+  #     --from-literal=WOODPECKER_GITEA_CLIENT=<oauth-client-id> \
+  #     --from-literal=WOODPECKER_GITEA_SECRET=<oauth-client-secret> \
+  #     -n woodpecker
+  #   kubectl create secret generic woodpecker-secret \
+  #     --from-literal=WOODPECKER_AGENT_SECRET=<random-secret> \
+  #     -n woodpecker
+  # Then seal with kubeseal.
+  env:
+    # -- Woodpecker server host URL
+    WOODPECKER_HOST: "https://ci.apps.home.lab"
+    # -- Gitea integration URL
+    WOODPECKER_GITEA: "true"
+    WOODPECKER_GITEA_URL: "https://gitea.apps.home.lab"
+    # -- Skip TLS verification for self-signed certs
+    WOODPECKER_GITEA_SKIP_VERIFY: "true"
+    # -- Allow user registration from Gitea OAuth
+    WOODPECKER_OPEN: "true"
+    # -- Limit to specific Gitea organizations (optional)
+    # WOODPECKER_GITEA_ORGS: ""
+    # -- Log level
+    WOODPECKER_LOG_LEVEL: "info"
+
+  # -- Secrets from Kubernetes secrets (sensitive env vars)
+  extraSecretNamesForEnvFrom:
+    - woodpecker-gitea-credentials
+    - woodpecker-secret
+
+  # -- Ingress configuration via Traefik
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    annotations:
+      cert-manager.io/cluster-issuer: selfsigned-issuer
+      traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    hosts:
+      - host: ci.apps.home.lab
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: woodpecker-tls
+        hosts:
+          - ci.apps.home.lab
+
+  # -- Resource allocation for the server
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # -- Persistence for server database (SQLite by default)
+  persistentVolume:
+    enabled: true
+    storageClass: longhorn
+    size: 5Gi
+    accessModes:
+      - ReadWriteOnce
+
+# =============================================================================
+# Woodpecker Agent
+# =============================================================================
+agent:
+  # -- Number of agent replicas for parallel pipeline execution
+  replicaCount: 2
+
+  # -- Agent environment variables
+  env:
+    # -- Server GRPC endpoint for agent communication
+    WOODPECKER_SERVER: "woodpecker-server:9000"
+    # -- Max concurrent pipelines per agent
+    WOODPECKER_MAX_WORKFLOWS: "2"
+    # -- Backend for running pipeline steps
+    WOODPECKER_BACKEND: "kubernetes"
+    # -- Log level
+    WOODPECKER_LOG_LEVEL: "info"
+
+  # -- Agent secret for server communication (same secret as server)
+  extraSecretNamesForEnvFrom:
+    - woodpecker-secret
+
+  # -- Resource allocation for each agent replica
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+  # -- Pipeline workspace volume (ephemeral per build)
+  # Agents use the Kubernetes backend, so pipeline steps run as pods.
+  # The storage class is used for any persistent workspace needs.
+  persistence:
+    enabled: true
+    storageClass: longhorn
+    size: 10Gi
+    accessModes:
+      - ReadWriteOnce

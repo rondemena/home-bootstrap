@@ -1,0 +1,137 @@
+# =============================================================================
+# Gitea Helm Values
+# Chart: gitea-charts/gitea
+# Repository: https://dl.gitea.com/charts/
+# Task: T062 - Secondary SDLC stack: lightweight source control
+# =============================================================================
+#
+# Deployment notes:
+#   - Lightweight Git hosting for learning and comparison
+#   - SQLite database (no external database dependency)
+#   - SSH access via LoadBalancer on port 222
+#   - Ingress via Traefik at gitea.apps.home.lab
+#   - Minimal resource allocation (secondary stack)
+# =============================================================================
+
+# -- Gitea application configuration
+gitea:
+  # -- Server configuration
+  config:
+    APP_NAME: "Gitea - Home Lab"
+
+    server:
+      DOMAIN: gitea.apps.home.lab
+      ROOT_URL: https://gitea.apps.home.lab
+      SSH_DOMAIN: gitea.apps.home.lab
+      SSH_PORT: 222
+      SSH_LISTEN_PORT: 22
+      LFS_START_SERVER: true
+
+    # -- SQLite database (lightweight, no external dependencies)
+    database:
+      DB_TYPE: sqlite3
+      PATH: /data/gitea/gitea.db
+
+    # -- Session storage on disk
+    session:
+      PROVIDER: file
+
+    # -- Cache configuration
+    cache:
+      ADAPTER: memory
+
+    # -- Repository settings
+    repository:
+      ROOT: /data/git/repositories
+      DEFAULT_BRANCH: main
+
+    # -- Security settings
+    security:
+      INSTALL_LOCK: false
+      SECRET_KEY: ""
+      INTERNAL_TOKEN: ""
+
+    # -- Service settings
+    service:
+      DISABLE_REGISTRATION: false
+      REQUIRE_SIGNIN_VIEW: false
+      ENABLE_NOTIFY_MAIL: false
+
+    # -- Logging
+    log:
+      MODE: console
+      LEVEL: info
+
+    # -- Metrics endpoint for Prometheus
+    metrics:
+      ENABLED: true
+
+  # -- Admin user setup (first-run)
+  # admin:
+  #   username: gitea_admin
+  #   password: changeit
+  #   email: admin@home.lab
+
+# -- Ingress configuration via Traefik
+ingress:
+  enabled: true
+  className: traefik
+  annotations:
+    cert-manager.io/cluster-issuer: selfsigned-issuer
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+  hosts:
+    - host: gitea.apps.home.lab
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: gitea-tls
+      hosts:
+        - gitea.apps.home.lab
+
+# -- SSH service via LoadBalancer (MetalLB assigns IP from pool)
+service:
+  http:
+    type: ClusterIP
+    port: 3000
+  ssh:
+    type: LoadBalancer
+    port: 222
+    annotations:
+      metallb.universe.tf/address-pool: default
+
+# -- Persistence for Gitea data (repositories, database, LFS)
+persistence:
+  enabled: true
+  storageClass: longhorn
+  size: 10Gi
+  accessModes:
+    - ReadWriteOnce
+
+# -- Resource requests and limits (minimal for secondary stack)
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 1Gi
+
+# -- Disable bundled PostgreSQL (using SQLite)
+postgresql:
+  enabled: false
+
+# -- Disable bundled PostgreSQL HA
+postgresql-ha:
+  enabled: false
+
+# -- Disable bundled Redis (using in-memory cache)
+redis-cluster:
+  enabled: false
+
+# -- Disable bundled Memcached
+memcached:
+  enabled: false
+
+# -- Init container to set correct permissions on data volume
+initPreScript: ""

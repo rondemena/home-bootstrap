@@ -1,0 +1,132 @@
+---
+# Playbook: ArgoCD Installation
+# Target: localhost (uses fetched kubeconfig)
+# Purpose: Deploy ArgoCD via Helm to the k3s cluster for GitOps management
+#
+# Usage: ansible-playbook -i inventory/hosts.yml playbooks/05-argocd-install.yml
+#
+# Prerequisites:
+#   - k3s cluster running with kubeconfig at ~/.kube/config
+#   - MetalLB, Longhorn, cert-manager, Sealed Secrets deployed (Phase 5)
+
+- name: Install ArgoCD via Helm
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    kubeconfig_path: "{{ lookup('env', 'KUBECONFIG') | default('~/.kube/config', true) }}"
+    argocd_namespace: argocd
+    argocd_chart_version: "7.7.x"
+    argocd_values_file: "{{ playbook_dir }}/../../k8s/argocd/install/values.yaml"
+
+  pre_tasks:
+    - name: Verify kubeconfig exists
+      ansible.builtin.stat:
+        path: "{{ kubeconfig_path }}"
+      register: kubeconfig_stat
+
+    - name: Fail if kubeconfig is missing
+      ansible.builtin.fail:
+        msg: >-
+          Kubeconfig not found at {{ kubeconfig_path }}.
+          Run playbook 03-k3s-install.yml first to fetch kubeconfig from the k3s server.
+      when: not kubeconfig_stat.stat.exists
+
+    - name: Verify cluster connectivity
+      ansible.builtin.command:
+        cmd: kubectl --kubeconfig {{ kubeconfig_path }} cluster-info
+      register: cluster_info
+      changed_when: false
+      failed_when: cluster_info.rc != 0
+
+  tasks:
+    - name: Add Argo Helm repository
+      kubernetes.core.helm_repository:
+        name: argo
+        repo_url: https://argoproj.github.io/argo-helm
+
+    - name: Create argocd namespace
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig_path }}"
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: "{{ argocd_namespace }}"
+
+    - name: Deploy ArgoCD via Helm
+      kubernetes.core.helm:
+        name: argocd
+        chart_ref: argo/argo-cd
+        chart_version: "{{ argocd_chart_version }}"
+        release_namespace: "{{ argocd_namespace }}"
+        create_namespace: true
+        kubeconfig: "{{ kubeconfig_path }}"
+        values_files:
+          - "{{ argocd_values_file }}"
+        wait: true
+        wait_timeout: 600s
+
+    - name: Wait for argocd-server deployment to be ready
+      kubernetes.core.k8s_info:
+        kubeconfig: "{{ kubeconfig_path }}"
+        kind: Deployment
+        name: argocd-server
+        namespace: "{{ argocd_namespace }}"
+        wait: true
+        wait_timeout: 300
+        wait_condition:
+          type: Available
+          status: "True"
+      register: argocd_server_deployment
+
+    - name: Wait for argocd-repo-server deployment to be ready
+      kubernetes.core.k8s_info:
+        kubeconfig: "{{ kubeconfig_path }}"
+        kind: Deployment
+        name: argocd-repo-server
+        namespace: "{{ argocd_namespace }}"
+        wait: true
+        wait_timeout: 300
+        wait_condition:
+          type: Available
+          status: "True"
+
+    - name: Retrieve ArgoCD initial admin password
+      kubernetes.core.k8s_info:
+        kubeconfig: "{{ kubeconfig_path }}"
+        kind: Secret
+        name: argocd-initial-admin-secret
+        namespace: "{{ argocd_namespace }}"
+      register: argocd_admin_secret
+
+    - name: Decode admin password
+      ansible.builtin.set_fact:
+        argocd_admin_password: >-
+          {{ argocd_admin_secret.resources[0].data.password | b64decode }}
+      when: argocd_admin_secret.resources | length > 0
+
+    - name: Display ArgoCD access information
+      ansible.builtin.debug:
+        msg:
+          - "======================================"
+          - "ArgoCD deployment complete"
+          - "======================================"
+          - "URL:      https://argocd.apps.home.lab"
+          - "Username: admin"
+          - "Password: {{ argocd_admin_password }}"
+          - "======================================"
+          - ""
+          - "NOTE: Change the admin password after first login."
+          - "NOTE: TLS uses a self-signed certificate (cert-manager selfsigned-issuer)."
+      when: argocd_admin_password is defined
+
+    - name: Warn if admin secret not found
+      ansible.builtin.debug:
+        msg: >-
+          ArgoCD initial admin secret not found. The password may have been
+          deleted after a previous login. Use 'argocd admin initial-password'
+          or reset via the argocd-secret Secret.
+      when: argocd_admin_secret.resources | length == 0

@@ -1,0 +1,69 @@
+---
+# iLO Provisioning Role
+# Handles both iLO 4 (DL360g9) and iLO 5 (DL380g10)
+# Idempotent: skips if Proxmox already installed
+
+- name: Display server info
+  ansible.builtin.debug:
+    msg: >-
+      Provisioning {{ server_model | default('unknown') }}
+      via {{ ilo_version }} at {{ ilo_host }}
+
+- name: Check if Proxmox is already installed
+  when: proxmox_already_installed | default(false)
+  block:
+    - name: Skip provisioning for pre-installed Proxmox
+      ansible.builtin.debug:
+        msg: >-
+          Proxmox already installed on {{ inventory_hostname }}.
+          Skipping iLO provisioning.
+
+    - name: End play for this host
+      ansible.builtin.meta: end_host
+
+- name: Gather iLO system information
+  community.general.redfish_info:
+    baseuri: "{{ ilo_host }}"
+    username: "{{ ilo_user }}"
+    password: "{{ ilo_pass }}"
+    category: Systems
+    command: GetSystemInventory
+  register: ilo_system_info
+  delegate_to: localhost
+
+- name: Display current system info
+  ansible.builtin.debug:
+    msg: "System: {{ ilo_system_info.redfish_facts.system.entries[0][1] | default({}) }}"
+    verbosity: 1
+
+# BIOS Configuration (idempotent)
+- name: Include BIOS configuration tasks
+  ansible.builtin.include_tasks: bios.yml
+
+# Proxmox Installation via Virtual Media
+- name: Check if Proxmox API is already reachable
+  ansible.builtin.uri:
+    url: "https://{{ hostvars[inventory_hostname].ansible_host | default(ilo_host | regex_replace('192\\.168\\.5\\.', '192.168.2.')) }}:8006/api2/json/version"
+    validate_certs: false
+    timeout: 10
+  register: pve_api_check
+  failed_when: false
+  delegate_to: localhost
+
+- name: Skip installation if Proxmox API already responds
+  when: pve_api_check.status | default(0) == 200
+  block:
+    - name: Proxmox already running
+      ansible.builtin.debug:
+        msg: "Proxmox API already responds. Skipping installation."
+
+    - name: End play for this host
+      ansible.builtin.meta: end_host
+
+# Virtual media and installation
+- name: Include virtual media tasks based on iLO version
+  ansible.builtin.include_tasks: "virtual_media_{{ ilo_version }}.yml"
+
+# Post-installation verification
+- name: Include post-install verification
+  ansible.builtin.include_tasks: verify.yml

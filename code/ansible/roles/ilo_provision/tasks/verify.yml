@@ -1,0 +1,21 @@
+---
+# Post-installation verification
+
+- name: Derive management IP from iLO IP
+  ansible.builtin.set_fact:
+    pve_management_ip: "{{ ilo_host | regex_replace('192\\.168\\.5\\.', '192.168.2.') }}"
+
+- name: Verify Proxmox API is reachable
+  ansible.builtin.uri:
+    url: "https://{{ pve_management_ip }}:8006/api2/json/version"
+    validate_certs: false
+    timeout: 30
+  register: pve_verify
+  retries: 5
+  delay: 30
+  until: pve_verify.status == 200
+  delegate_to: localhost
+
+- name: Display Proxmox version
+  ansible.builtin.debug:
+    msg: "Proxmox VE {{ pve_verify.json.data.version }} installed on {{ inventory_hostname }}"

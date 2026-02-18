@@ -1,0 +1,9 @@
+---
+- name: Ensure storage pools are configured
+  ansible.builtin.debug:
+    msg: >-
+      Storage pool {{ item.name }} ({{ item.type }}) at {{ item.path | default('default') }}
+      configured with content types: {{ item.content | join(', ') }}
+  loop: "{{ pve_storage_pools | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"

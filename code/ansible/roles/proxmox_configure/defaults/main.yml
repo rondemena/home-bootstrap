@@ -1,0 +1,13 @@
+---
+# Proxmox configuration defaults
+pve_no_subscription_repo: true
+pve_enterprise_repo: false
+pve_api_verify_ssl: false
+pve_api_port: 8006
+
+# API token for OpenTofu (created if not exists)
+pve_automation_user: "automation@pam"
+pve_automation_token_id: "tofu"
+
+# Snippets storage for cloud-init
+pve_snippets_storage: local

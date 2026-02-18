@@ -1,0 +1,28 @@
+---
+# MetalLB Helm values for home lab k3s cluster
+# Chart: metallb/metallb
+# Namespace: metallb-system
+#
+# Minimal configuration - L2 mode for home network (no BGP).
+# IP pool is configured via separate CRs (ip-pool.yaml) applied
+# after the Helm release is ready.
+
+# Controller deployment
+controller:
+  # Single replica is sufficient for home lab
+  replicaCount: 1
+
+# Speaker DaemonSet (runs on all nodes for L2 ARP responses)
+speaker:
+  # Use memberlist for speaker-to-speaker communication
+  # This avoids requiring a secrets-based key
+  frr:
+    enabled: false
+
+# Prometheus metrics (optional, enable when monitoring stack is ready)
+prometheus:
+  # Enable ServiceMonitor when kube-prometheus-stack is deployed
+  serviceMonitor:
+    enabled: false
+  prometheusRule:
+    enabled: false

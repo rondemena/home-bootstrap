@@ -1,0 +1,28 @@
+---
+- name: Verify
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Verify role defaults exist
+      ansible.builtin.stat:
+        path: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/defaults/main.yml"
+      register: defaults_file
+      delegate_to: localhost
+
+    - name: Assert defaults file exists
+      ansible.builtin.assert:
+        that:
+          - defaults_file.stat.exists
+        fail_msg: "Role defaults/main.yml not found"
+
+    - name: Verify role tasks exist
+      ansible.builtin.stat:
+        path: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/tasks/main.yml"
+      register: tasks_file
+      delegate_to: localhost
+
+    - name: Assert tasks file exists
+      ansible.builtin.assert:
+        that:
+          - tasks_file.stat.exists
+        fail_msg: "Role tasks/main.yml not found"

@@ -1,0 +1,8 @@
+---
+- name: Enable snippets content type on storage
+  ansible.builtin.command:
+    cmd: "pvesm set {{ pve_snippets_storage }} --content {{ (existing_content + ['snippets']) | unique | join(',') }}"
+  vars:
+    existing_content: "{{ pve_storage_pools | selectattr('name', 'equalto', pve_snippets_storage) | map(attribute='content') | first | default([]) }}"
+  changed_when: "'snippets' not in existing_content"
+  check_mode: false

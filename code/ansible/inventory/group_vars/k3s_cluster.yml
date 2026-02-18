@@ -1,0 +1,8 @@
+---
+k3s_version: "v1.31.4+k3s1"
+k3s_server_url: "https://192.168.2.100:6443"
+metallb_ip_range: "192.168.2.240-192.168.2.250"
+ingress_domain: "apps.home.lab"
+
+# k3s install script URL
+k3s_install_script: "https://get.k3s.io"

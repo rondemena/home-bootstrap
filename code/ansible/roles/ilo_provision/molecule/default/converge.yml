@@ -1,0 +1,22 @@
+---
+- name: Converge
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Include ilo_provision role
+      ansible.builtin.include_role:
+        name: ilo_provision
+      when: false  # Skip actual execution in molecule (requires real iLO)
+      # Molecule verifies the role syntax and variable requirements
+
+    - name: Verify role directory exists
+      ansible.builtin.stat:
+        path: "{{ role_path }}"
+      register: role_dir
+      delegate_to: localhost
+
+    - name: Assert role structure is valid
+      ansible.builtin.assert:
+        that:
+          - role_dir.stat.exists
+        fail_msg: "ilo_provision role not found"

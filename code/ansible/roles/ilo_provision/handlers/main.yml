@@ -1,0 +1,6 @@
+---
+- name: reboot for bios changes
+  ansible.builtin.debug:
+    msg: >-
+      BIOS changes applied. Server will be rebooted during
+      virtual media boot step.

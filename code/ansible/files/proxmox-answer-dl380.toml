@@ -1,0 +1,20 @@
+# Proxmox VE automated installation answer file — DL380 Gen10
+# See: https://pve.proxmox.com/wiki/Automated_Installation
+
+[global]
+keyboard = "en-us"
+country = "us"
+fqdn = "pve-01.home.lab"
+mailto = "admin@home.lab"
+timezone = "America/New_York"
+root_password = "REPLACE_IN_DEPLOYMENT"
+
+[network]
+source = "from-answer"
+cidr = "192.168.2.11/24"
+dns = "192.168.2.1"
+gateway = "192.168.2.1"
+
+[disk-setup]
+filesystem = "ext4"
+disk_list = ["sda"]

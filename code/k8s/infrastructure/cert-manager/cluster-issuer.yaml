@@ -1,0 +1,14 @@
+---
+# Self-signed ClusterIssuer for *.apps.home.lab
+# Applied after cert-manager Helm release is ready and CRDs are installed
+#
+# This issuer generates self-signed certificates. For a home lab this is
+# acceptable. Browsers will show a warning but TLS encryption is active.
+# To upgrade to a proper CA later, replace this with a CA or ACME issuer.
+
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned-issuer
+spec:
+  selfSigned: {}

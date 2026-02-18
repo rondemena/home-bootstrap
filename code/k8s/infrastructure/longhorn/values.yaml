@@ -1,0 +1,54 @@
+---
+# Longhorn Helm values for home lab k3s cluster
+# Chart: longhorn/longhorn
+# Namespace: longhorn-system
+#
+# Distributed block storage across 2 agent nodes.
+# Default StorageClass for all PVC requests.
+
+# Persistence settings
+persistence:
+  # Set Longhorn as the default StorageClass
+  defaultClass: true
+  # 2 replicas for 2 agent nodes (data availability)
+  defaultClassReplicaCount: 2
+  # Default filesystem type
+  defaultFsType: ext4
+
+# Default data path on each node
+defaultSettings:
+  # Where Longhorn stores replica data on host filesystem
+  defaultDataPath: /var/lib/longhorn
+  # Number of replicas for new volumes
+  defaultReplicaCount: 2
+  # Guarantee scheduling on nodes with available storage
+  storageOverProvisioningPercentage: 100
+  storageMinimalAvailablePercentage: 15
+  # Auto-delete workload pods when a volume is detached unexpectedly
+  autoDeletePodWhenVolumeDetachedUnexpectedly: true
+  # Node drain policy for k3s maintenance
+  nodeDrainPolicy: block-for-eviction
+
+# Longhorn UI ingress (disabled by default for security)
+# Enable manually if needed: helm upgrade --set ingress.enabled=true
+ingress:
+  enabled: false
+  # Uncomment below to expose the UI
+  # host: longhorn.apps.home.lab
+  # ingressClassName: traefik
+  # tls: true
+  # tlsSecret: longhorn-tls
+
+# Longhorn manager
+longhornManager:
+  # Log level for troubleshooting
+  log:
+    level: warn
+
+# CSI driver settings
+csi:
+  # Attach/detach timeout
+  attacherReplicaCount: 1
+  provisionerReplicaCount: 1
+  resizerReplicaCount: 1
+  snapshotterReplicaCount: 1

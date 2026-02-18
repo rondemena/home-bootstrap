@@ -1,0 +1,66 @@
+# =============================================================================
+# SealedSecret TEMPLATE: GitLab API Token for Jenkins
+# Task: T067 - GitLab->Jenkins integration
+# =============================================================================
+#
+# This is a TEMPLATE file. The encryptedData values are placeholders and
+# MUST be replaced with actual kubeseal output before applying to the cluster.
+#
+# Purpose:
+#   Jenkins uses this token to authenticate against the GitLab CE API for:
+#   - Validating incoming webhook payloads
+#   - Setting commit build statuses on GitLab merge requests
+#   - Cloning private repositories during pipeline execution
+#
+# The Jenkins JCasC configuration in values.yaml references this secret
+# via the credential id "gitlab-api-token" in the gitlab-config and
+# credentials-config sections.
+#
+# How to create and seal this secret:
+#
+#   1. Create a GitLab Personal Access Token with scopes: api, read_repository
+#      (GitLab > User Settings > Access Tokens)
+#
+#   2. Generate the plaintext Kubernetes secret:
+#      kubectl create secret generic gitlab-api-token \
+#        --from-literal=gitlab-api-token=glpat-XXXXXXXXXXXXXXXXXXXX \
+#        --namespace=jenkins \
+#        --dry-run=client -o yaml > /tmp/gitlab-api-token.yaml
+#
+#   3. Seal it with kubeseal:
+#      kubeseal --format=yaml \
+#        --controller-name=sealed-secrets \
+#        --controller-namespace=kube-system \
+#        < /tmp/gitlab-api-token.yaml \
+#        > code/k8s/apps/jenkins/sealed-secrets/gitlab-api-token.yaml
+#
+#   4. Delete the plaintext file:
+#      rm /tmp/gitlab-api-token.yaml
+#
+#   5. Commit this file to the repository.
+#      The Sealed Secrets controller will decrypt it into a regular
+#      Kubernetes Secret in the jenkins namespace.
+#
+# =============================================================================
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: gitlab-api-token
+  namespace: jenkins
+  labels:
+    app.kubernetes.io/part-of: jenkins
+    app.kubernetes.io/component: integration
+    integration: gitlab
+spec:
+  template:
+    metadata:
+      name: gitlab-api-token
+      namespace: jenkins
+      labels:
+        app.kubernetes.io/part-of: jenkins
+        app.kubernetes.io/component: integration
+        integration: gitlab
+  encryptedData:
+    # REPLACE this value with the output of kubeseal (see instructions above)
+    gitlab-api-token: "REPLACE_WITH_KUBESEAL_OUTPUT"

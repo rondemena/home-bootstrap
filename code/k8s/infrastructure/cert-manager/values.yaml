@@ -1,0 +1,37 @@
+---
+# cert-manager Helm values for home lab k3s cluster
+# Chart: jetstack/cert-manager
+# Namespace: cert-manager
+#
+# Manages TLS certificates for *.apps.home.lab via self-signed
+# ClusterIssuer. CRDs are installed with the Helm chart.
+
+# Install cert-manager CRDs with the chart
+# Required for Certificate, ClusterIssuer, etc. resources
+installCRDs: true
+
+# Single replica is sufficient for home lab
+replicaCount: 1
+
+# Webhook configuration
+webhook:
+  replicaCount: 1
+
+# CA injector
+cainjector:
+  replicaCount: 1
+
+# Resource limits appropriate for home lab
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+# Prometheus metrics (optional, enable when monitoring stack is ready)
+prometheus:
+  enabled: false
+  servicemonitor:
+    enabled: false

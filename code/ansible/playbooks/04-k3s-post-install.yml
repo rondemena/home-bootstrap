@@ -1,0 +1,427 @@
+---
+# Playbook: k3s Post-Install - Infrastructure Services
+# Target: localhost (uses kubeconfig from 03-k3s-install.yml)
+# Purpose: Deploy MetalLB, Longhorn, cert-manager, and Sealed Secrets via Helm
+#
+# Usage:
+#   make deploy-infra
+#   ansible-playbook -i inventory/hosts.yml playbooks/04-k3s-post-install.yml
+#
+# Prerequisites:
+#   - k3s cluster running (03-k3s-install.yml completed)
+#   - kubeconfig at ~/.kube/config pointing to k3s-server-01
+#   - helm CLI installed on workstation
+#
+# Idempotency:
+#   - Uses "helm upgrade --install" pattern (idempotent)
+#   - Kubernetes manifests applied with "kubectl apply" (idempotent)
+#   - Each wait step validates deployment before proceeding
+#
+# Tags:
+#   helm-repos    - Add/update Helm repositories
+#   metallb       - Deploy MetalLB + IP pool
+#   longhorn      - Deploy Longhorn storage
+#   cert-manager  - Deploy cert-manager + ClusterIssuer
+#   sealed-secrets - Deploy Sealed Secrets controller
+
+- name: Deploy k3s Infrastructure Services
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  vars:
+    kubeconfig_path: "{{ lookup('env', 'HOME') }}/.kube/config"
+    k8s_infra_dir: "{{ playbook_dir }}/../../k8s/infrastructure"
+    helm_timeout: "5m0s"
+
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+
+  pre_tasks:
+    - name: Verify kubeconfig exists
+      ansible.builtin.stat:
+        path: "{{ kubeconfig_path }}"
+      register: kubeconfig_file
+      tags:
+        - always
+
+    - name: Fail if kubeconfig is missing
+      ansible.builtin.assert:
+        that:
+          - kubeconfig_file.stat.exists
+        fail_msg: >-
+          Kubeconfig not found at {{ kubeconfig_path }}.
+          Run 03-k3s-install.yml first to fetch the kubeconfig.
+      tags:
+        - always
+
+    - name: Verify kubectl can connect to cluster
+      ansible.builtin.command:
+        cmd: kubectl cluster-info
+      register: cluster_info
+      changed_when: false
+      tags:
+        - always
+
+    - name: Verify helm is installed
+      ansible.builtin.command:
+        cmd: helm version --short
+      register: helm_version
+      changed_when: false
+      tags:
+        - always
+
+    - name: Display cluster connection info
+      ansible.builtin.debug:
+        msg:
+          - "Kubectl: {{ cluster_info.stdout_lines[0] | default('connected') }}"
+          - "Helm: {{ helm_version.stdout }}"
+      tags:
+        - always
+
+  tasks:
+    # ========================================================================
+    # Helm Repositories
+    # ========================================================================
+    - name: Add MetalLB Helm repository
+      ansible.builtin.command:
+        cmd: helm repo add metallb https://metallb.github.io/metallb
+      register: metallb_repo
+      changed_when: "'has been added' in metallb_repo.stdout"
+      failed_when:
+        - metallb_repo.rc != 0
+        - "'already exists' not in metallb_repo.stderr"
+      tags:
+        - helm-repos
+        - metallb
+
+    - name: Add Longhorn Helm repository
+      ansible.builtin.command:
+        cmd: helm repo add longhorn https://charts.longhorn.io
+      register: longhorn_repo
+      changed_when: "'has been added' in longhorn_repo.stdout"
+      failed_when:
+        - longhorn_repo.rc != 0
+        - "'already exists' not in longhorn_repo.stderr"
+      tags:
+        - helm-repos
+        - longhorn
+
+    - name: Add Jetstack (cert-manager) Helm repository
+      ansible.builtin.command:
+        cmd: helm repo add jetstack https://charts.jetstack.io
+      register: jetstack_repo
+      changed_when: "'has been added' in jetstack_repo.stdout"
+      failed_when:
+        - jetstack_repo.rc != 0
+        - "'already exists' not in jetstack_repo.stderr"
+      tags:
+        - helm-repos
+        - cert-manager
+
+    - name: Add Sealed Secrets Helm repository
+      ansible.builtin.command:
+        cmd: helm repo add sealed-secrets https://bitnami-labs.github.io/sealed-secrets
+      register: sealed_secrets_repo
+      changed_when: "'has been added' in sealed_secrets_repo.stdout"
+      failed_when:
+        - sealed_secrets_repo.rc != 0
+        - "'already exists' not in sealed_secrets_repo.stderr"
+      tags:
+        - helm-repos
+        - sealed-secrets
+
+    - name: Update Helm repository index
+      ansible.builtin.command:
+        cmd: helm repo update
+      changed_when: false
+      tags:
+        - helm-repos
+
+    # ========================================================================
+    # MetalLB
+    # ========================================================================
+    - name: Create metallb-system namespace
+      ansible.builtin.command:
+        cmd: kubectl create namespace metallb-system --dry-run=client -o yaml
+      register: metallb_ns_yaml
+      changed_when: false
+      tags:
+        - metallb
+
+    - name: Apply metallb-system namespace
+      ansible.builtin.command:
+        cmd: kubectl apply -f -
+        stdin: "{{ metallb_ns_yaml.stdout }}"
+      register: metallb_ns_apply
+      changed_when: "'created' in metallb_ns_apply.stdout"
+      tags:
+        - metallb
+
+    - name: Deploy MetalLB via Helm
+      ansible.builtin.command:
+        cmd: >-
+          helm upgrade --install metallb metallb/metallb
+          --namespace metallb-system
+          --values {{ k8s_infra_dir }}/metallb/values.yaml
+          --timeout {{ helm_timeout }}
+          --wait
+      register: metallb_deploy
+      changed_when: "'STATUS: deployed' in metallb_deploy.stdout"
+      tags:
+        - metallb
+
+    - name: Wait for MetalLB controller to be ready
+      ansible.builtin.command:
+        cmd: >-
+          kubectl wait --for=condition=ready pod
+          -l app.kubernetes.io/component=controller
+          -n metallb-system
+          --timeout=120s
+      changed_when: false
+      tags:
+        - metallb
+
+    - name: Wait for MetalLB webhook to be ready
+      ansible.builtin.command:
+        cmd: >-
+          kubectl wait --for=condition=ready pod
+          -l component=controller
+          -n metallb-system
+          --timeout=120s
+      changed_when: false
+      failed_when: false
+      tags:
+        - metallb
+
+    - name: Wait for MetalLB CRDs to be established
+      ansible.builtin.command:
+        cmd: >-
+          kubectl wait --for=condition=Established
+          crd/ipaddresspools.metallb.io
+          --timeout=60s
+      changed_when: false
+      tags:
+        - metallb
+
+    - name: Apply MetalLB IP pool configuration
+      ansible.builtin.command:
+        cmd: kubectl apply -f {{ k8s_infra_dir }}/metallb/ip-pool.yaml
+      register: metallb_pool_apply
+      changed_when: >-
+        'created' in metallb_pool_apply.stdout or
+        'configured' in metallb_pool_apply.stdout
+      tags:
+        - metallb
+
+    - name: Display MetalLB deployment status
+      ansible.builtin.debug:
+        msg: "MetalLB deployed with IP pool 192.168.2.240-192.168.2.250"
+      tags:
+        - metallb
+
+    # ========================================================================
+    # Longhorn
+    # ========================================================================
+    - name: Create longhorn-system namespace
+      ansible.builtin.command:
+        cmd: kubectl create namespace longhorn-system --dry-run=client -o yaml
+      register: longhorn_ns_yaml
+      changed_when: false
+      tags:
+        - longhorn
+
+    - name: Apply longhorn-system namespace
+      ansible.builtin.command:
+        cmd: kubectl apply -f -
+        stdin: "{{ longhorn_ns_yaml.stdout }}"
+      register: longhorn_ns_apply
+      changed_when: "'created' in longhorn_ns_apply.stdout"
+      tags:
+        - longhorn
+
+    - name: Deploy Longhorn via Helm
+      ansible.builtin.command:
+        cmd: >-
+          helm upgrade --install longhorn longhorn/longhorn
+          --namespace longhorn-system
+          --values {{ k8s_infra_dir }}/longhorn/values.yaml
+          --timeout {{ helm_timeout }}
+          --wait
+      register: longhorn_deploy
+      changed_when: "'STATUS: deployed' in longhorn_deploy.stdout"
+      tags:
+        - longhorn
+
+    - name: Wait for Longhorn manager to be ready
+      ansible.builtin.command:
+        cmd: >-
+          kubectl wait --for=condition=ready pod
+          -l app=longhorn-manager
+          -n longhorn-system
+          --timeout=180s
+      changed_when: false
+      tags:
+        - longhorn
+
+    - name: Verify Longhorn StorageClass exists
+      ansible.builtin.command:
+        cmd: kubectl get storageclass longhorn
+      register: longhorn_sc
+      changed_when: false
+      tags:
+        - longhorn
+
+    - name: Display Longhorn deployment status
+      ansible.builtin.debug:
+        msg: "Longhorn deployed with 2 replicas, default StorageClass enabled"
+      tags:
+        - longhorn
+
+    # ========================================================================
+    # cert-manager
+    # ========================================================================
+    - name: Create cert-manager namespace
+      ansible.builtin.command:
+        cmd: kubectl create namespace cert-manager --dry-run=client -o yaml
+      register: certmgr_ns_yaml
+      changed_when: false
+      tags:
+        - cert-manager
+
+    - name: Apply cert-manager namespace
+      ansible.builtin.command:
+        cmd: kubectl apply -f -
+        stdin: "{{ certmgr_ns_yaml.stdout }}"
+      register: certmgr_ns_apply
+      changed_when: "'created' in certmgr_ns_apply.stdout"
+      tags:
+        - cert-manager
+
+    - name: Deploy cert-manager via Helm
+      ansible.builtin.command:
+        cmd: >-
+          helm upgrade --install cert-manager jetstack/cert-manager
+          --namespace cert-manager
+          --values {{ k8s_infra_dir }}/cert-manager/values.yaml
+          --timeout {{ helm_timeout }}
+          --wait
+      register: certmgr_deploy
+      changed_when: "'STATUS: deployed' in certmgr_deploy.stdout"
+      tags:
+        - cert-manager
+
+    - name: Wait for cert-manager controller to be ready
+      ansible.builtin.command:
+        cmd: >-
+          kubectl wait --for=condition=ready pod
+          -l app.kubernetes.io/component=controller
+          -n cert-manager
+          --timeout=120s
+      changed_when: false
+      tags:
+        - cert-manager
+
+    - name: Wait for cert-manager webhook to be ready
+      ansible.builtin.command:
+        cmd: >-
+          kubectl wait --for=condition=ready pod
+          -l app.kubernetes.io/component=webhook
+          -n cert-manager
+          --timeout=120s
+      changed_when: false
+      tags:
+        - cert-manager
+
+    - name: Wait for cert-manager CRDs to be established
+      ansible.builtin.command:
+        cmd: >-
+          kubectl wait --for=condition=Established
+          crd/clusterissuers.cert-manager.io
+          --timeout=60s
+      changed_when: false
+      tags:
+        - cert-manager
+
+    - name: Apply self-signed ClusterIssuer
+      ansible.builtin.command:
+        cmd: kubectl apply -f {{ k8s_infra_dir }}/cert-manager/cluster-issuer.yaml
+      register: cluster_issuer_apply
+      changed_when: >-
+        'created' in cluster_issuer_apply.stdout or
+        'configured' in cluster_issuer_apply.stdout
+      tags:
+        - cert-manager
+
+    - name: Wait for ClusterIssuer to be ready
+      ansible.builtin.command:
+        cmd: >-
+          kubectl wait --for=condition=ready clusterissuer/selfsigned-issuer
+          --timeout=60s
+      changed_when: false
+      retries: 3
+      delay: 5
+      register: issuer_ready
+      until: issuer_ready.rc == 0
+      tags:
+        - cert-manager
+
+    - name: Display cert-manager deployment status
+      ansible.builtin.debug:
+        msg: "cert-manager deployed with self-signed ClusterIssuer for *.apps.home.lab"
+      tags:
+        - cert-manager
+
+    # ========================================================================
+    # Sealed Secrets
+    # ========================================================================
+    - name: Deploy Sealed Secrets via Helm
+      ansible.builtin.command:
+        cmd: >-
+          helm upgrade --install sealed-secrets sealed-secrets/sealed-secrets
+          --namespace kube-system
+          --values {{ k8s_infra_dir }}/sealed-secrets/values.yaml
+          --timeout {{ helm_timeout }}
+          --wait
+      register: sealed_secrets_deploy
+      changed_when: "'STATUS: deployed' in sealed_secrets_deploy.stdout"
+      tags:
+        - sealed-secrets
+
+    - name: Wait for Sealed Secrets controller to be ready
+      ansible.builtin.command:
+        cmd: >-
+          kubectl wait --for=condition=ready pod
+          -l app.kubernetes.io/name=sealed-secrets
+          -n kube-system
+          --timeout=120s
+      changed_when: false
+      tags:
+        - sealed-secrets
+
+    - name: Display Sealed Secrets deployment status
+      ansible.builtin.debug:
+        msg: "Sealed Secrets controller deployed to kube-system namespace"
+      tags:
+        - sealed-secrets
+
+    # ========================================================================
+    # Final Verification
+    # ========================================================================
+    - name: Display infrastructure deployment summary
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "  Infrastructure Services Deployed"
+          - "=========================================="
+          - "  MetalLB:         metallb-system  (IP pool: 192.168.2.240-250)"
+          - "  Longhorn:        longhorn-system (replicas: 2, default SC)"
+          - "  cert-manager:    cert-manager    (self-signed ClusterIssuer)"
+          - "  Sealed Secrets:  kube-system     (controller ready)"
+          - "=========================================="
+          - ""
+          - "  Next steps:"
+          - "    make test-infra    # Validate infrastructure services"
+          - "    make deploy-apps   # Deploy SDLC applications"
+      tags:
+        - always

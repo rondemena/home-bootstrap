@@ -1,0 +1,59 @@
+---
+# ArgoCD Application: Harbor
+# Stack: Primary — container registry with vulnerability scanning
+# Chart: harbor/harbor ~1.15
+# Ingress: harbor.apps.home.lab
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: harbor
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: sdlc
+    stack: primary
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://helm.goharbor.io
+    chart: harbor
+    targetRevision: "~1.15"
+    helm:
+      valueFiles: []
+      values: |
+        expose:
+          type: ingress
+          ingress:
+            className: traefik
+            annotations:
+              cert-manager.io/cluster-issuer: selfsigned-issuer
+            hosts:
+              core: harbor.apps.home.lab
+        externalURL: https://harbor.apps.home.lab
+        persistence:
+          enabled: true
+          persistentVolumeClaim:
+            registry:
+              storageClass: longhorn
+              size: 50Gi
+            database:
+              storageClass: longhorn
+              size: 5Gi
+            redis:
+              storageClass: longhorn
+              size: 2Gi
+        trivy:
+          enabled: true
+        notary:
+          enabled: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: harbor
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

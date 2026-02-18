@@ -1,0 +1,187 @@
+# =============================================================================
+# Harbor Helm Values
+# Chart: harbor/harbor
+# Repository: https://helm.goharbor.io/
+# Task: T061 - Primary SDLC stack: container registry
+# =============================================================================
+#
+# Deployment notes:
+#   - Ingress via Traefik at harbor.apps.home.lab
+#   - TLS terminated at ingress (internal TLS disabled)
+#   - Persistence via Longhorn StorageClass
+#   - Trivy vulnerability scanner enabled
+#   - Notary disabled (not needed for home lab)
+#   - Admin password should be sealed before production use
+# =============================================================================
+
+# -- External access URL (must match ingress host with https)
+externalURL: https://harbor.apps.home.lab
+
+# -- Expose method: ingress (via Traefik)
+expose:
+  type: ingress
+  tls:
+    enabled: true
+    # -- Use cert-manager to provision TLS certificates
+    certSource: secret
+    secret:
+      secretName: harbor-tls
+  ingress:
+    hosts:
+      core: harbor.apps.home.lab
+    className: traefik
+    annotations:
+      cert-manager.io/cluster-issuer: selfsigned-issuer
+      traefik.ingress.kubernetes.io/router.entrypoints: websecure
+      # -- Increase body size for large image layers
+      ingress.kubernetes.io/proxy-body-size: "0"
+
+# -- Internal TLS between Harbor components: disabled
+# TLS is terminated at the ingress layer by Traefik
+internalTLS:
+  enabled: false
+
+# -- Harbor admin password
+# Replace with a sealed secret in production.
+# Create with: kubectl create secret generic harbor-admin-password \
+#   --from-literal=HARBOR_ADMIN_PASSWORD=changeit -n harbor
+# Then seal with kubeseal
+harborAdminPassword: "changeit"
+
+# -- IP family (IPv4 only for home lab)
+ipFamily:
+  ipv6:
+    enabled: false
+
+# =============================================================================
+# Persistence Configuration (all volumes on Longhorn)
+# =============================================================================
+
+persistence:
+  enabled: true
+  resourcePolicy: "keep"
+
+  persistentVolumeClaim:
+    # -- Container image registry storage
+    registry:
+      storageClass: longhorn
+      size: 100Gi
+      accessMode: ReadWriteOnce
+
+    # -- Harbor database (PostgreSQL)
+    database:
+      storageClass: longhorn
+      size: 5Gi
+      accessMode: ReadWriteOnce
+
+    # -- Redis for caching and job queues
+    redis:
+      storageClass: longhorn
+      size: 1Gi
+      accessMode: ReadWriteOnce
+
+    # -- Job service logs
+    jobservice:
+      jobLog:
+        storageClass: longhorn
+        size: 1Gi
+        accessMode: ReadWriteOnce
+
+    # -- Trivy vulnerability database cache
+    trivy:
+      storageClass: longhorn
+      size: 5Gi
+      accessMode: ReadWriteOnce
+
+# =============================================================================
+# Component Configuration
+# =============================================================================
+
+# -- Portal (web UI)
+portal:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# -- Core service (API, authentication, authorization)
+core:
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+# -- Job service (replication, garbage collection)
+jobservice:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  # -- Maximum number of concurrent replication jobs
+  maxJobWorkers: 5
+
+# -- Container image registry
+registry:
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+# -- Trivy vulnerability scanner
+trivy:
+  enabled: true
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+  # -- Auto-update vulnerability database
+  autoRefresh: true
+
+# -- Notary (content trust): disabled for home lab
+notary:
+  enabled: false
+
+# -- Internal database (PostgreSQL bundled with Harbor)
+database:
+  type: internal
+  internal:
+    resources:
+      requests:
+        cpu: 200m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+
+# -- Internal Redis
+redis:
+  type: internal
+  internal:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+# -- Metrics for Prometheus scraping
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: true

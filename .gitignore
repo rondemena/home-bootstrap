@@ -1,0 +1,56 @@
+# OpenTofu / Terraform
+.terraform/
+.tofu/
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+crash.log
+*.tfvars.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraform.lock.hcl
+
+# Ansible
+*.retry
+*.pyc
+__pycache__/
+
+# SOPS decrypted files
+*.enc.yml.dec
+*.enc.yaml.dec
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Kubernetes
+kubeconfig*
+*.kubeconfig
+.kube/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Bootstrap state (resume support)
+.bootstrap-state
+
+# Logs
+*.log

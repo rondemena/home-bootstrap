@@ -1,0 +1,15 @@
+---
+ansible_user: admin
+ansible_ssh_private_key_file: ~/.ssh/id_ed25519
+ansible_python_interpreter: /usr/bin/python3
+
+domain: home.lab
+dns_servers:
+  - 192.168.2.1
+ntp_servers:
+  - pool.ntp.org
+
+# Ubuntu cloud image for VM templates
+cloud_image_url: "https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img"
+cloud_image_checksum: "sha256:https://cloud-images.ubuntu.com/noble/current/SHA256SUMS"
+template_vmid: 9000

@@ -1,0 +1,23 @@
+---
+dependency:
+  name: galaxy
+driver:
+  name: default
+platforms:
+  - name: ilo-test
+    image: "geerlingguy/docker-ubuntu2404-ansible:latest"
+    pre_build_image: true
+    privileged: true
+provisioner:
+  name: ansible
+  inventory:
+    host_vars:
+      ilo-test:
+        ilo_host: "192.168.5.99"
+        ilo_user: "test-user"
+        ilo_version: "ilo5"
+        proxmox_already_installed: true
+        proxmox_answer_file: "proxmox-answer-test.toml"
+        proxmox_iso_url: "http://test.local/proxmox.iso"
+verifier:
+  name: ansible

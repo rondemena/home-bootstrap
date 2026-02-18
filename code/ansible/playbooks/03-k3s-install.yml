@@ -1,0 +1,369 @@
+---
+# Playbook: k3s Cluster Installation
+# Target: k3s_server (first), k3s_agent (second), localhost (kubeconfig)
+# Purpose: Install k3s server and agent nodes, fetch kubeconfig, verify cluster
+#
+# Usage:
+#   make bootstrap-k3s
+#   ansible-playbook -i inventory/hosts.yml playbooks/03-k3s-install.yml
+#
+# Idempotency:
+#   - Checks if k3s is already installed at the correct version before reinstalling
+#   - k3s install script is natively idempotent (re-runs are safe)
+#   - Agent join is idempotent (re-joining an existing member is a no-op)
+#
+# Tags:
+#   k3s-server   - Install k3s server only
+#   k3s-agent    - Install k3s agents only
+#   k3s-token    - Fetch join token from server
+#   kubeconfig   - Fetch and configure kubeconfig
+#   verify       - Verify cluster health
+
+# ============================================================================
+# Play 1: Install k3s server on the control plane node
+# ============================================================================
+- name: Install k3s server
+  hosts: k3s_server
+  gather_facts: true
+  tags:
+    - k3s-server
+
+  pre_tasks:
+    - name: Validate required variables
+      ansible.builtin.assert:
+        that:
+          - k3s_version is defined
+          - k3s_version | length > 0
+          - ansible_host is defined
+        fail_msg: >-
+          Missing required k3s variables. Ensure k3s_version is defined
+          in group_vars/k3s_cluster.yml and ansible_host is set in inventory.
+      tags:
+        - always
+
+  tasks:
+    - name: Check if k3s is already installed
+      ansible.builtin.stat:
+        path: /usr/local/bin/k3s
+      register: k3s_binary
+      tags:
+        - k3s-server
+
+    - name: Get current k3s version
+      ansible.builtin.command:
+        cmd: k3s --version
+      register: k3s_current_version
+      changed_when: false
+      failed_when: false
+      when: k3s_binary.stat.exists
+      tags:
+        - k3s-server
+
+    - name: Determine if k3s installation is needed
+      ansible.builtin.set_fact:
+        k3s_install_needed: >-
+          {{
+            not k3s_binary.stat.exists or
+            (k3s_current_version.stdout is defined and
+             k3s_version not in (k3s_current_version.stdout | default('')))
+          }}
+      tags:
+        - k3s-server
+
+    - name: Display k3s installation status
+      ansible.builtin.debug:
+        msg: >-
+          k3s installed: {{ k3s_binary.stat.exists }},
+          version match: {{ not k3s_install_needed }},
+          target version: {{ k3s_version }}
+      tags:
+        - k3s-server
+
+    - name: Download k3s install script
+      ansible.builtin.get_url:
+        url: "{{ k3s_install_script | default('https://get.k3s.io') }}"
+        dest: /tmp/k3s-install.sh
+        mode: "0755"
+        force: true
+      when: k3s_install_needed | bool
+      tags:
+        - k3s-server
+
+    - name: Install k3s server
+      ansible.builtin.command:
+        cmd: /tmp/k3s-install.sh
+      environment:
+        INSTALL_K3S_VERSION: "{{ k3s_version }}"
+        INSTALL_K3S_EXEC: "server {{ k3s_server_args | join(' ') }}"
+      register: k3s_server_install
+      changed_when: k3s_server_install.rc == 0
+      when: k3s_install_needed | bool
+      tags:
+        - k3s-server
+
+    - name: Wait for k3s server to be ready
+      ansible.builtin.wait_for:
+        path: /etc/rancher/k3s/k3s.yaml
+        state: present
+        timeout: 120
+      tags:
+        - k3s-server
+
+    - name: Wait for k3s API server to respond
+      ansible.builtin.command:
+        cmd: k3s kubectl get nodes
+      register: k3s_api_check
+      retries: 12
+      delay: 10
+      until: k3s_api_check.rc == 0
+      changed_when: false
+      tags:
+        - k3s-server
+
+    - name: Ensure k3s service is enabled
+      ansible.builtin.systemd:
+        name: k3s
+        enabled: true
+        state: started
+      tags:
+        - k3s-server
+
+    - name: Read k3s node token
+      ansible.builtin.slurp:
+        src: /var/lib/rancher/k3s/server/node-token
+      register: k3s_node_token_raw
+      tags:
+        - k3s-token
+
+    - name: Set k3s node token fact
+      ansible.builtin.set_fact:
+        k3s_node_token: "{{ k3s_node_token_raw.content | b64decode | trim }}"
+      tags:
+        - k3s-token
+
+# ============================================================================
+# Play 2: Install k3s agent on worker nodes
+# ============================================================================
+- name: Install k3s agents
+  hosts: k3s_agent
+  gather_facts: true
+  tags:
+    - k3s-agent
+
+  pre_tasks:
+    - name: Validate required variables
+      ansible.builtin.assert:
+        that:
+          - k3s_version is defined
+          - k3s_server_url is defined
+        fail_msg: >-
+          Missing required k3s variables. Ensure k3s_version and
+          k3s_server_url are defined in group_vars/k3s_cluster.yml.
+      tags:
+        - always
+
+    - name: Retrieve join token from server
+      ansible.builtin.set_fact:
+        k3s_node_token: "{{ hostvars[groups['k3s_server'][0]]['k3s_node_token'] }}"
+      tags:
+        - k3s-agent
+
+    - name: Validate join token is available
+      ansible.builtin.assert:
+        that:
+          - k3s_node_token is defined
+          - k3s_node_token | length > 0
+        fail_msg: >-
+          k3s node token not available. Ensure the k3s server play ran
+          successfully before agent installation.
+      tags:
+        - k3s-agent
+
+  tasks:
+    - name: Check if k3s agent is already installed
+      ansible.builtin.stat:
+        path: /usr/local/bin/k3s
+      register: k3s_agent_binary
+      tags:
+        - k3s-agent
+
+    - name: Get current k3s agent version
+      ansible.builtin.command:
+        cmd: k3s --version
+      register: k3s_agent_current_version
+      changed_when: false
+      failed_when: false
+      when: k3s_agent_binary.stat.exists
+      tags:
+        - k3s-agent
+
+    - name: Determine if k3s agent installation is needed
+      ansible.builtin.set_fact:
+        k3s_agent_install_needed: >-
+          {{
+            not k3s_agent_binary.stat.exists or
+            (k3s_agent_current_version.stdout is defined and
+             k3s_version not in (k3s_agent_current_version.stdout | default('')))
+          }}
+      tags:
+        - k3s-agent
+
+    - name: Display k3s agent installation status
+      ansible.builtin.debug:
+        msg: >-
+          k3s agent installed: {{ k3s_agent_binary.stat.exists }},
+          version match: {{ not k3s_agent_install_needed }},
+          target version: {{ k3s_version }}
+      tags:
+        - k3s-agent
+
+    - name: Download k3s install script
+      ansible.builtin.get_url:
+        url: "{{ k3s_install_script | default('https://get.k3s.io') }}"
+        dest: /tmp/k3s-install.sh
+        mode: "0755"
+        force: true
+      when: k3s_agent_install_needed | bool
+      tags:
+        - k3s-agent
+
+    - name: Install k3s agent
+      ansible.builtin.command:
+        cmd: /tmp/k3s-install.sh
+      environment:
+        INSTALL_K3S_VERSION: "{{ k3s_version }}"
+        INSTALL_K3S_EXEC: "agent {{ k3s_agent_args | join(' ') }}"
+        K3S_URL: "{{ k3s_server_url }}"
+        K3S_TOKEN: "{{ k3s_node_token }}"
+      register: k3s_agent_install
+      changed_when: k3s_agent_install.rc == 0
+      when: k3s_agent_install_needed | bool
+      tags:
+        - k3s-agent
+
+    - name: Ensure k3s-agent service is enabled
+      ansible.builtin.systemd:
+        name: k3s-agent
+        enabled: true
+        state: started
+      tags:
+        - k3s-agent
+
+    - name: Wait for k3s agent to join cluster
+      ansible.builtin.command:
+        cmd: k3s kubectl get nodes
+      delegate_to: "{{ groups['k3s_server'][0] }}"
+      register: k3s_node_list
+      retries: 12
+      delay: 10
+      until: inventory_hostname in k3s_node_list.stdout
+      changed_when: false
+      tags:
+        - k3s-agent
+
+# ============================================================================
+# Play 3: Fetch kubeconfig from server to workstation
+# ============================================================================
+- name: Fetch kubeconfig to workstation
+  hosts: k3s_server
+  gather_facts: false
+  tags:
+    - kubeconfig
+
+  tasks:
+    - name: Read kubeconfig from server
+      ansible.builtin.slurp:
+        src: /etc/rancher/k3s/k3s.yaml
+      register: k3s_kubeconfig_raw
+      tags:
+        - kubeconfig
+
+    - name: Ensure local .kube directory exists
+      ansible.builtin.file:
+        path: "{{ lookup('env', 'HOME') }}/.kube"
+        state: directory
+        mode: "0700"
+      delegate_to: localhost
+      become: false
+      tags:
+        - kubeconfig
+
+    - name: Write kubeconfig with correct server address
+      ansible.builtin.copy:
+        content: >-
+          {{ k3s_kubeconfig_raw.content | b64decode |
+             regex_replace('https://127.0.0.1:6443',
+                           'https://' + ansible_host + ':6443') }}
+        dest: "{{ lookup('env', 'HOME') }}/.kube/config"
+        mode: "0600"
+      delegate_to: localhost
+      become: false
+      tags:
+        - kubeconfig
+
+    - name: Display kubeconfig location
+      ansible.builtin.debug:
+        msg: >-
+          Kubeconfig written to {{ lookup('env', 'HOME') }}/.kube/config
+          (server: https://{{ ansible_host }}:6443)
+      tags:
+        - kubeconfig
+
+# ============================================================================
+# Play 4: Verify cluster health
+# ============================================================================
+- name: Verify k3s cluster
+  hosts: k3s_server
+  gather_facts: false
+  tags:
+    - verify
+
+  tasks:
+    - name: Get cluster node list
+      ansible.builtin.command:
+        cmd: k3s kubectl get nodes -o wide
+      register: k3s_nodes
+      changed_when: false
+      tags:
+        - verify
+
+    - name: Display cluster nodes
+      ansible.builtin.debug:
+        msg: "{{ k3s_nodes.stdout_lines }}"
+      tags:
+        - verify
+
+    - name: Verify all expected nodes are Ready
+      ansible.builtin.command:
+        cmd: k3s kubectl get nodes --no-headers
+      register: k3s_node_status
+      changed_when: false
+      tags:
+        - verify
+
+    - name: Assert all nodes are Ready
+      ansible.builtin.assert:
+        that:
+          - "'NotReady' not in k3s_node_status.stdout"
+          - "k3s_node_status.stdout_lines | length >= 3"
+        fail_msg: >-
+          Not all nodes are Ready. Expected at least 3 nodes.
+          Current status: {{ k3s_node_status.stdout }}
+        success_msg: >-
+          All {{ k3s_node_status.stdout_lines | length }} nodes are Ready
+      tags:
+        - verify
+
+    - name: Get kube-system pod status
+      ansible.builtin.command:
+        cmd: k3s kubectl get pods -n kube-system
+      register: k3s_system_pods
+      changed_when: false
+      tags:
+        - verify
+
+    - name: Display kube-system pods
+      ansible.builtin.debug:
+        msg: "{{ k3s_system_pods.stdout_lines }}"
+      tags:
+        - verify
