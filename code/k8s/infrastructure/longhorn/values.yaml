@@ -3,6 +3,10 @@
 # Chart: longhorn/longhorn
 # Namespace: longhorn-system
 #
+# NOTE: Domain-specific values below are defaults for apps.home.lab.
+# Actual domain is overridden via ArgoCD Application helm values
+# configured by Ansible (see code/ansible/templates/argocd-apps/).
+#
 # Distributed block storage across 2 agent nodes.
 # Default StorageClass for all PVC requests.
 

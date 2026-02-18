@@ -10,6 +10,15 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 
+# Source .env for environment-specific overrides (METALLB_IP_RANGE, INGRESS_DOMAIN, etc.)
+# When run via test-e2e.sh the .env is already sourced; this allows standalone execution.
+if [[ -f "${REPO_ROOT}/.env" ]]; then
+    # shellcheck disable=SC1091
+    set -a
+    source "${REPO_ROOT}/.env"
+    set +a
+fi
+
 export KUBECONFIG="${KUBECONFIG:-${HOME}/.kube/config}"
 
 # Colors for output
@@ -29,8 +38,12 @@ log_skip() { echo -e "${YELLOW}[SKIP]${NC} $1"; ((SKIP++)); }
 log_info() { echo -e "${CYAN}[INFO]${NC} $1"; }
 
 # Configuration
-METALLB_POOL_START="192.168.2.240"
-METALLB_POOL_END="192.168.2.250"
+# METALLB_IP_RANGE is defined in .env (default: 192.168.2.240-192.168.2.250)
+METALLB_IP_RANGE="${METALLB_IP_RANGE:-192.168.2.240-192.168.2.250}"
+METALLB_POOL_START="${METALLB_POOL_START:-${METALLB_IP_RANGE%%-*}}"
+METALLB_POOL_END="${METALLB_POOL_END:-${METALLB_IP_RANGE##*-}}"
+# INGRESS_DOMAIN is used for the cert-manager test certificate DNS name
+INGRESS_DOMAIN="${INGRESS_DOMAIN:-apps.${DOMAIN:-home.lab}}"
 TEST_NAMESPACE="infra-test-$$"
 CLEANUP_RESOURCES=()
 
@@ -344,6 +357,7 @@ test_cert_manager() {
     issuer_name=$(echo "${issuers}" | awk 'NR==1{print $1}')
 
     # Create a test Certificate resource
+    local test_dns_name="test.${INGRESS_DOMAIN}"
     log_info "Creating test Certificate using ClusterIssuer '${issuer_name}'..."
     kubectl apply -n "${TEST_NAMESPACE}" -f - <<YAML &> /dev/null
 apiVersion: cert-manager.io/v1
@@ -358,7 +372,7 @@ spec:
     name: ${issuer_name}
     kind: ClusterIssuer
   dnsNames:
-    - test.apps.home.lab
+    - ${test_dns_name}
 YAML
     CLEANUP_RESOURCES+=("-n ${TEST_NAMESPACE} certificate/test-cert")
     CLEANUP_RESOURCES+=("-n ${TEST_NAMESPACE} secret/test-cert-tls")
@@ -382,7 +396,7 @@ YAML
     done
 
     if [[ "${cert_ready}" == "True" ]]; then
-        log_pass "Test certificate issued successfully for test.apps.home.lab"
+        log_pass "Test certificate issued successfully for ${test_dns_name}"
     else
         local cert_message
         cert_message=$(kubectl get certificate -n "${TEST_NAMESPACE}" test-cert \

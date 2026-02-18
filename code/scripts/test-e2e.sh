@@ -8,6 +8,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 TESTS_DIR="${REPO_ROOT}/tests"
 
+# Source .env if present
+if [[ -f "${REPO_ROOT}/.env" ]]; then
+    # shellcheck disable=SC1091
+    set -a
+    source "${REPO_ROOT}/.env"
+    set +a
+fi
+
 PASS=0
 FAIL=0
 SKIP=0

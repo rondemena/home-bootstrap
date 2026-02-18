@@ -1,0 +1,8 @@
+---
+- name: Install k3s server
+  ansible.builtin.include_tasks: server.yml
+  when: k3s_role == "server"
+
+- name: Install k3s agent
+  ansible.builtin.include_tasks: agent.yml
+  when: k3s_role == "agent"

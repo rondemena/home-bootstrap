@@ -2,6 +2,10 @@
 # MinIO Helm values for OpenTofu state backend
 # Chart: minio/minio
 # Namespace: minio
+#
+# NOTE: Domain-specific values below are defaults for apps.home.lab.
+# Actual domain is overridden via ArgoCD Application helm values
+# configured by Ansible (see code/ansible/templates/argocd-apps/).
 
 # -- Deployment mode (standalone for home lab)
 mode: standalone

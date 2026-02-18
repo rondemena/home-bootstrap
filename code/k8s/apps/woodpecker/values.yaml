@@ -5,6 +5,10 @@
 # Task: T063 - Secondary SDLC stack: lightweight CI/CD
 # =============================================================================
 #
+# NOTE: Domain-specific values below are defaults for apps.home.lab.
+# Actual domain is overridden via ArgoCD Application helm values
+# configured by Ansible (see code/ansible/templates/argocd-apps/).
+#
 # Deployment notes:
 #   - Server ingress at ci.apps.home.lab via Traefik
 #   - Gitea OAuth integration for authentication and repo access

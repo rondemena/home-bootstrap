@@ -1,7 +1,8 @@
 ---
 # Playbook: ArgoCD Installation
 # Target: localhost (uses fetched kubeconfig)
-# Purpose: Deploy ArgoCD via Helm to the k3s cluster for GitOps management
+# Purpose: Deploy ArgoCD via Helm to the k3s cluster for GitOps management,
+#          then template and apply ArgoCD Application manifests.
 #
 # Usage: ansible-playbook -i inventory/hosts.yml playbooks/05-argocd-install.yml
 #
@@ -9,7 +10,7 @@
 #   - k3s cluster running with kubeconfig at ~/.kube/config
 #   - MetalLB, Longhorn, cert-manager, Sealed Secrets deployed (Phase 5)
 
-- name: Install ArgoCD via Helm
+- name: Install ArgoCD via Helm and deploy applications
   hosts: localhost
   connection: local
   gather_facts: false
@@ -18,7 +19,9 @@
     kubeconfig_path: "{{ lookup('env', 'KUBECONFIG') | default('~/.kube/config', true) }}"
     argocd_namespace: argocd
     argocd_chart_version: "7.7.x"
-    argocd_values_file: "{{ playbook_dir }}/../../k8s/argocd/install/values.yaml"
+    argocd_values_template: "{{ playbook_dir }}/../templates/argocd-install-values.yaml.j2"
+    argocd_apps_template_dir: "{{ playbook_dir }}/../templates/argocd-apps"
+    rendered_dir: "/tmp/argocd-rendered"
 
   pre_tasks:
     - name: Verify kubeconfig exists
@@ -41,6 +44,9 @@
       failed_when: cluster_info.rc != 0
 
   tasks:
+    # -----------------------------------------------------------------
+    # ArgoCD Helm Installation
+    # -----------------------------------------------------------------
     - name: Add Argo Helm repository
       kubernetes.core.helm_repository:
         name: argo
@@ -56,6 +62,18 @@
           metadata:
             name: "{{ argocd_namespace }}"
 
+    - name: Create rendered output directory
+      ansible.builtin.file:
+        path: "{{ rendered_dir }}"
+        state: directory
+        mode: "0700"
+
+    - name: Template ArgoCD install values
+      ansible.builtin.template:
+        src: "{{ argocd_values_template }}"
+        dest: "{{ rendered_dir }}/argocd-values.yaml"
+        mode: "0600"
+
     - name: Deploy ArgoCD via Helm
       kubernetes.core.helm:
         name: argocd
@@ -65,7 +83,7 @@
         create_namespace: true
         kubeconfig: "{{ kubeconfig_path }}"
         values_files:
-          - "{{ argocd_values_file }}"
+          - "{{ rendered_dir }}/argocd-values.yaml"
         wait: true
         wait_timeout: 600s
 
@@ -94,6 +112,36 @@
           type: Available
           status: "True"
 
+    # -----------------------------------------------------------------
+    # ArgoCD Application Manifests (templated from Jinja2)
+    # -----------------------------------------------------------------
+    - name: Find ArgoCD Application templates
+      ansible.builtin.find:
+        paths: "{{ argocd_apps_template_dir }}"
+        patterns: "*.yaml.j2"
+      register: argocd_app_templates
+
+    - name: Template ArgoCD Application manifests
+      ansible.builtin.template:
+        src: "{{ item.path }}"
+        dest: "{{ rendered_dir }}/{{ item.path | basename | regex_replace('\\.j2$', '') }}"
+        mode: "0600"
+      loop: "{{ argocd_app_templates.files }}"
+      loop_control:
+        label: "{{ item.path | basename }}"
+
+    - name: Apply ArgoCD Application manifests
+      kubernetes.core.k8s:
+        kubeconfig: "{{ kubeconfig_path }}"
+        state: present
+        src: "{{ rendered_dir }}/{{ item.path | basename | regex_replace('\\.j2$', '') }}"
+      loop: "{{ argocd_app_templates.files }}"
+      loop_control:
+        label: "{{ item.path | basename | regex_replace('\\.j2$', '') }}"
+
+    # -----------------------------------------------------------------
+    # Post-install information
+    # -----------------------------------------------------------------
     - name: Retrieve ArgoCD initial admin password
       kubernetes.core.k8s_info:
         kubeconfig: "{{ kubeconfig_path }}"
@@ -114,7 +162,7 @@
           - "======================================"
           - "ArgoCD deployment complete"
           - "======================================"
-          - "URL:      https://argocd.apps.home.lab"
+          - "URL:      https://argocd.{{ ingress_domain }}"
           - "Username: admin"
           - "Password: {{ argocd_admin_password }}"
           - "======================================"
@@ -130,3 +178,8 @@
           deleted after a previous login. Use 'argocd admin initial-password'
           or reset via the argocd-secret Secret.
       when: argocd_admin_secret.resources | length == 0
+
+    - name: Clean up rendered manifests
+      ansible.builtin.file:
+        path: "{{ rendered_dir }}"
+        state: absent

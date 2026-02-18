@@ -15,3 +15,15 @@ ilo_ssh_check_retries: 30             # Retry SSH 30 times (30 min total at 60s 
 
 # Virtual media settings
 ilo_virtual_media_device_index: 2     # CD/DVD slot
+
+# Network mapping: derive Proxmox management IP from iLO IP
+# Override these if your iLO and management networks use different subnets
+ilo_mgmt_subnet: "192.168.5"
+pve_mgmt_subnet: "192.168.2"
+
+# Proxmox answer file template variables
+pve_admin_email: ""
+pve_timezone: "America/New_York"
+pve_filesystem: "ext4"
+pve_disk_list: ["sda"]
+pve_root_password: "REPLACE_IN_DEPLOYMENT"

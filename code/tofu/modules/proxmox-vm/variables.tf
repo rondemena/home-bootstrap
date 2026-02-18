@@ -24,13 +24,8 @@ variable "name" {
 }
 
 variable "role" {
-  description = "VM role for tagging and identification"
+  description = "VM role for tagging and identification (freeform string)"
   type        = string
-
-  validation {
-    condition     = contains(["k3s-server", "k3s-agent", "utility"], var.role)
-    error_message = "Role must be one of: k3s-server, k3s-agent, utility."
-  }
 }
 
 variable "cores" {
@@ -39,8 +34,8 @@ variable "cores" {
   default     = 4
 
   validation {
-    condition     = var.cores >= 2
-    error_message = "Minimum 2 CPU cores required."
+    condition     = var.cores >= 1
+    error_message = "Minimum 1 CPU core required."
   }
 }
 
@@ -50,8 +45,8 @@ variable "memory_mb" {
   default     = 4096
 
   validation {
-    condition     = var.memory_mb >= 2048
-    error_message = "Minimum 2048 MB memory required."
+    condition     = var.memory_mb >= 512
+    error_message = "Minimum 512 MB memory required."
   }
 }
 
@@ -61,8 +56,8 @@ variable "disk_gb" {
   default     = 50
 
   validation {
-    condition     = var.disk_gb >= 20
-    error_message = "Minimum 20 GB disk required."
+    condition     = var.disk_gb >= 10
+    error_message = "Minimum 10 GB disk required."
   }
 }
 
@@ -81,6 +76,12 @@ variable "dns_servers" {
   type        = list(string)
 }
 
+variable "dns_domain" {
+  description = "DNS search domain for cloud-init"
+  type        = string
+  default     = ""
+}
+
 variable "storage_pool" {
   description = "Proxmox storage pool for VM disk"
   type        = string
@@ -94,9 +95,9 @@ variable "network_bridge" {
 }
 
 variable "vlan_id" {
-  description = "VLAN tag for the network interface"
+  description = "VLAN tag for the network interface (0 = untagged)"
   type        = number
-  default     = 2
+  default     = 0
 }
 
 variable "template_vmid" {
@@ -114,4 +115,22 @@ variable "cloud_init_user" {
 variable "ssh_public_key" {
   description = "SSH public key for cloud-init user"
   type        = string
+}
+
+variable "cpu_type" {
+  description = "CPU type emulation (e.g., x86-64-v2-AES, host, kvm64)"
+  type        = string
+  default     = "x86-64-v2-AES"
+}
+
+variable "disk_format" {
+  description = "Disk image format (raw, qcow2)"
+  type        = string
+  default     = "raw"
+}
+
+variable "tags" {
+  description = "Additional tags to apply to the VM"
+  type        = list(string)
+  default     = []
 }

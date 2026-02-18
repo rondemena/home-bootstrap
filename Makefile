@@ -5,6 +5,15 @@
 #   make help            Show all available targets
 #   make bootstrap       Run full bootstrap sequence
 #   make lint            Run all linters
+#
+# Configuration:
+#   Copy .env.example to .env and customize for your environment.
+
+# ---------------------------------------------------------------------------
+# Load .env if present (override any variable below)
+# ---------------------------------------------------------------------------
+-include .env
+export
 
 # ---------------------------------------------------------------------------
 # Path variables
@@ -14,6 +23,15 @@ TOFU_DIR     := code/tofu
 K8S_DIR      := code/k8s
 SCRIPTS_DIR  := code/scripts
 TESTS_DIR    := tests
+
+# ---------------------------------------------------------------------------
+# Configurable defaults (override via .env or CLI)
+# ---------------------------------------------------------------------------
+DOMAIN          ?= home.lab
+INGRESS_DOMAIN  ?= apps.$(DOMAIN)
+PVE_API_URL     ?= https://192.168.2.11:8006/
+PVE_NODE        ?= pve-01
+DNS_SERVER      ?= 192.168.2.1
 
 # ---------------------------------------------------------------------------
 # Tool overrides (set via env or CLI)
@@ -50,13 +68,13 @@ HELM             ?= helm
 # ---------------------------------------------------------------------------
 ## help: Show this help message (default target)
 help:
-	@printf "\\n  home-bootstrap -- bare-metal SDLC bootstrap\\n\\n"
-	@printf "  %-25s %s\\n" "Target" "Description"
-	@printf "  %-25s %s\\n" "------" "-----------"
+	@printf "\n  home-bootstrap -- bare-metal SDLC bootstrap\n\n"
+	@printf "  %-25s %s\n" "Target" "Description"
+	@printf "  %-25s %s\n" "------" "-----------"
 	@grep -E '^## ' $(MAKEFILE_LIST) | \
 		sed 's/^## //' | \
 		awk -F: '{printf "  %-25s %s\n", $$1, $$2}'
-	@printf "\\n"
+	@printf "\n"
 
 # ===========================================================================
 # Layer 1 -- Bare Metal Provisioning
@@ -105,8 +123,8 @@ deploy-infra:
 
 ## deploy-apps: Deploy SDLC applications via ArgoCD
 deploy-apps:
-	cd $(ANSIBLE_DIR) && $(ANSIBLE_PLAYBOOK) playbooks/05-argocd-install.yml
-	$(KUBECTL) apply -f $(K8S_DIR)/argocd/applications/
+	cd $(ANSIBLE_DIR) && $(ANSIBLE_PLAYBOOK) playbooks/05-argocd-install.yml \
+		-e "domain=$(DOMAIN)" -e "ingress_domain=$(INGRESS_DOMAIN)"
 	@echo "Waiting for ArgoCD applications to sync..."
 	@sleep 30
 	$(KUBECTL) -n argocd get applications
@@ -151,13 +169,13 @@ test-ilo:
 ## test-proxmox: Test Proxmox host configuration
 test-proxmox:
 	@echo "Testing Proxmox API..."
-	@curl -sk --connect-timeout 5 "https://192.168.2.11:8006/api2/json/version" | jq .data.version
+	@curl -sk --connect-timeout 5 "$(PVE_API_URL)api2/json/version" | jq .data.version
 
 ## test-proxmox-auth: Test Proxmox API authentication
 test-proxmox-auth:
 	@echo "Testing Proxmox API auth..."
 	@curl -sk --connect-timeout 5 -H "Authorization: PVEAPIToken=$${PVE_API_TOKEN}" \
-		"https://192.168.2.11:8006/api2/json/nodes" | jq '.data[].node'
+		"$(PVE_API_URL)api2/json/nodes" | jq '.data[].node'
 
 ## test-vms: Run VM integration tests
 test-vms:
@@ -210,7 +228,7 @@ destroy-vms:
 
 ## destroy-all: Destroy ALL resources (VMs + k3s cluster) -- DANGEROUS
 destroy-all:
-	@printf "\\n  !!! WARNING: This will destroy ALL VMs and the k3s cluster !!!\\n"
-	@printf "  Press Ctrl+C within 10 seconds to abort...\\n\\n"
+	@printf "\n  !!! WARNING: This will destroy ALL VMs and the k3s cluster !!!\n"
+	@printf "  Press Ctrl+C within 10 seconds to abort...\n\n"
 	@sleep 10
 	cd $(TOFU_DIR)/environments/prod && $(TOFU) destroy -auto-approve

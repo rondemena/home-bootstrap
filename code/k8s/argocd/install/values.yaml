@@ -3,6 +3,11 @@
 # Chart: argo/argo-cd
 # Purpose: GitOps controller for all SDLC application deployments
 # Ingress: argocd.apps.home.lab via Traefik with self-signed TLS
+#
+# NOTE: This file is no longer applied directly. The Ansible playbook
+# templates code/ansible/templates/argocd-install-values.yaml.j2 with
+# domain variables and uses the rendered output for Helm install.
+# This file is preserved as documentation of the default values.
 
 ## Global settings
 global:

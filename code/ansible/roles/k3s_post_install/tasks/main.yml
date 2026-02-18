@@ -1,0 +1,29 @@
+---
+- name: Add and update Helm repositories
+  ansible.builtin.include_tasks: helm_repos.yml
+  tags:
+    - helm-repos
+
+- name: Deploy MetalLB
+  ansible.builtin.include_tasks: metallb.yml
+  when: k3s_deploy_metallb | bool
+  tags:
+    - metallb
+
+- name: Deploy Longhorn
+  ansible.builtin.include_tasks: longhorn.yml
+  when: k3s_deploy_longhorn | bool
+  tags:
+    - longhorn
+
+- name: Deploy cert-manager
+  ansible.builtin.include_tasks: cert_manager.yml
+  when: k3s_deploy_cert_manager | bool
+  tags:
+    - cert-manager
+
+- name: Deploy Sealed Secrets
+  ansible.builtin.include_tasks: sealed_secrets.yml
+  when: k3s_deploy_sealed_secrets | bool
+  tags:
+    - sealed-secrets

@@ -3,6 +3,11 @@
 # Stack: Primary — metrics, dashboards, and alerting
 # Chart: prometheus-community/kube-prometheus-stack ~65.0
 # Ingress: grafana.apps.home.lab, prometheus.apps.home.lab
+#
+# NOTE: This file is no longer applied directly. The Ansible playbook
+# templates code/ansible/templates/argocd-apps/monitoring.yaml.j2 with
+# domain variables and applies the rendered output via kubectl.
+# This file is preserved as documentation of the default values.
 
 apiVersion: argoproj.io/v1alpha1
 kind: Application

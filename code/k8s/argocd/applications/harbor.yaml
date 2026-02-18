@@ -3,6 +3,11 @@
 # Stack: Primary — container registry with vulnerability scanning
 # Chart: harbor/harbor ~1.15
 # Ingress: harbor.apps.home.lab
+#
+# NOTE: This file is no longer applied directly. The Ansible playbook
+# templates code/ansible/templates/argocd-apps/harbor.yaml.j2 with
+# domain variables and applies the rendered output via kubectl.
+# This file is preserved as documentation of the default values.
 
 apiVersion: argoproj.io/v1alpha1
 kind: Application

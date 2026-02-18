@@ -1,4 +1,9 @@
 ---
+# NOTE: This file is no longer applied directly. The Ansible playbook
+# templates code/ansible/templates/argocd-apps/minio.yaml.j2 with
+# domain variables and applies the rendered output via kubectl.
+# This file is preserved as documentation of the default values.
+
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:

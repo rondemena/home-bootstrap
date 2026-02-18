@@ -2,6 +2,10 @@
 # Self-signed ClusterIssuer for *.apps.home.lab
 # Applied after cert-manager Helm release is ready and CRDs are installed
 #
+# NOTE: Domain-specific values below are defaults for apps.home.lab.
+# Actual domain is overridden via ArgoCD Application helm values
+# configured by Ansible (see code/ansible/templates/argocd-apps/).
+#
 # This issuer generates self-signed certificates. For a home lab this is
 # acceptable. Browsers will show a warning but TLS encryption is active.
 # To upgrade to a proper CA later, replace this with a CA or ACME issuer.

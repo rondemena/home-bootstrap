@@ -9,6 +9,15 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 
+# Source .env for environment-specific overrides (KUBECONFIG, node names, etc.)
+# When run via test-e2e.sh the .env is already sourced; this allows standalone execution.
+if [[ -f "${REPO_ROOT}/.env" ]]; then
+    # shellcheck disable=SC1091
+    set -a
+    source "${REPO_ROOT}/.env"
+    set +a
+fi
+
 export KUBECONFIG="${KUBECONFIG:-${HOME}/.kube/config}"
 
 # Colors for output

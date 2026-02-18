@@ -1,0 +1,91 @@
+---
+- name: Create cert-manager namespace
+  ansible.builtin.command:
+    cmd: kubectl create namespace cert-manager --dry-run=client -o yaml
+  register: certmgr_ns_yaml
+  changed_when: false
+  tags:
+    - cert-manager
+
+- name: Apply cert-manager namespace
+  ansible.builtin.command:
+    cmd: kubectl apply -f -
+    stdin: "{{ certmgr_ns_yaml.stdout }}"
+  register: certmgr_ns_apply
+  changed_when: "'created' in certmgr_ns_apply.stdout"
+  tags:
+    - cert-manager
+
+- name: Deploy cert-manager via Helm
+  ansible.builtin.command:
+    cmd: >-
+      helm upgrade --install cert-manager jetstack/cert-manager
+      --namespace cert-manager
+      --values {{ k8s_infra_dir }}/cert-manager/values.yaml
+      --timeout {{ helm_timeout }}
+      --wait
+  register: certmgr_deploy
+  changed_when: "'STATUS: deployed' in certmgr_deploy.stdout"
+  tags:
+    - cert-manager
+
+- name: Wait for cert-manager controller to be ready
+  ansible.builtin.command:
+    cmd: >-
+      kubectl wait --for=condition=ready pod
+      -l app.kubernetes.io/component=controller
+      -n cert-manager
+      --timeout=120s
+  changed_when: false
+  tags:
+    - cert-manager
+
+- name: Wait for cert-manager webhook to be ready
+  ansible.builtin.command:
+    cmd: >-
+      kubectl wait --for=condition=ready pod
+      -l app.kubernetes.io/component=webhook
+      -n cert-manager
+      --timeout=120s
+  changed_when: false
+  tags:
+    - cert-manager
+
+- name: Wait for cert-manager CRDs to be established
+  ansible.builtin.command:
+    cmd: >-
+      kubectl wait --for=condition=Established
+      crd/clusterissuers.cert-manager.io
+      --timeout=60s
+  changed_when: false
+  tags:
+    - cert-manager
+
+- name: Apply self-signed ClusterIssuer
+  ansible.builtin.command:
+    cmd: kubectl apply -f {{ k8s_infra_dir }}/cert-manager/cluster-issuer.yaml
+  register: cluster_issuer_apply
+  changed_when: >-
+    'created' in cluster_issuer_apply.stdout or
+    'configured' in cluster_issuer_apply.stdout
+  tags:
+    - cert-manager
+
+- name: Wait for ClusterIssuer to be ready
+  ansible.builtin.command:
+    cmd: >-
+      kubectl wait --for=condition=ready clusterissuer/selfsigned-issuer
+      --timeout=60s
+  changed_when: false
+  retries: 3
+  delay: 5
+  register: issuer_ready
+  until: issuer_ready.rc == 0
+  tags:
+    - cert-manager
+
+- name: Display cert-manager deployment status
+  ansible.builtin.debug:
+    msg: "cert-manager deployed with self-signed ClusterIssuer for {{ ingress_domain | default('configured domain') }}"
+  tags:
+    - cert-manager

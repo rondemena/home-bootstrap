@@ -23,6 +23,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 export REPO_ROOT  # available to child processes
 
+# Source .env for environment-specific overrides (DOMAIN, INGRESS_DOMAIN, etc.)
+# When run via test-e2e.sh the .env is already sourced; this allows standalone execution.
+if [[ -f "${REPO_ROOT}/.env" ]]; then
+    # shellcheck disable=SC1091
+    set -a
+    source "${REPO_ROOT}/.env"
+    set +a
+fi
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -42,7 +51,8 @@ log_info() { echo -e "  ${CYAN}[INFO]${NC} $1"; }
 log_section() { echo -e "\n${BOLD}--- $1 ---${NC}"; }
 
 # Configuration
-INGRESS_DOMAIN="${INGRESS_DOMAIN:-apps.home.lab}"
+# INGRESS_DOMAIN: derived from DOMAIN if not set directly (both defined in .env)
+INGRESS_DOMAIN="${INGRESS_DOMAIN:-apps.${DOMAIN:-home.lab}}"
 GITLAB_URL="https://gitlab.${INGRESS_DOMAIN}"
 JENKINS_URL="https://jenkins.${INGRESS_DOMAIN}"
 HARBOR_URL="https://harbor.${INGRESS_DOMAIN}"

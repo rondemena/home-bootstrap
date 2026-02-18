@@ -19,10 +19,14 @@ module "k3s_vms" {
   ip_address      = each.value.ip_address
   gateway         = each.value.gateway
   dns_servers     = each.value.dns_servers
+  dns_domain      = var.dns_domain
   storage_pool    = each.value.storage_pool
   network_bridge  = each.value.network_bridge
   vlan_id         = each.value.vlan_id
   template_vmid   = each.value.template_vmid
   cloud_init_user = each.value.cloud_init_user
+  cpu_type        = each.value.cpu_type
+  disk_format     = each.value.disk_format
+  tags            = each.value.tags
   ssh_public_key  = var.ssh_public_key
 }

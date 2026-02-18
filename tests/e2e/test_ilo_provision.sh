@@ -8,6 +8,15 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
+# Source .env for environment-specific overrides (ILO_PASS, PVE_HOST, etc.)
+# When run via test-e2e.sh the .env is already sourced; this allows standalone execution.
+if [[ -f "${REPO_ROOT}/.env" ]]; then
+    # shellcheck disable=SC1091
+    set -a
+    source "${REPO_ROOT}/.env"
+    set +a
+fi
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -135,10 +144,13 @@ if [[ -n "${ILO_HOST}" ]]; then
     test_boot_mode "${ILO_HOST}"
     test_virtual_media_ejected "${ILO_HOST}"
 
-    # Derive Proxmox management IP from iLO IP
-    # Convention: 192.168.5.x (iLO) maps to 192.168.2.x (management)
-    PVE_HOST="${ILO_HOST/192.168.5./192.168.2.}"
-    test_proxmox_api "${PVE_HOST}"
+    # Derive Proxmox management IP: use PVE_HOST from .env if set, otherwise
+    # fall back to convention where 192.168.5.x (iLO) maps to 192.168.2.x (management)
+    if [[ -n "${PVE_HOST:-}" ]]; then
+        test_proxmox_api "${PVE_HOST}"
+    else
+        test_proxmox_api "${ILO_HOST/192.168.5./192.168.2.}"
+    fi
 fi
 
 echo ""

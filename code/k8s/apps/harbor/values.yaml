@@ -5,6 +5,10 @@
 # Task: T061 - Primary SDLC stack: container registry
 # =============================================================================
 #
+# NOTE: Domain-specific values below are defaults for apps.home.lab.
+# Actual domain is overridden via ArgoCD Application helm values
+# configured by Ansible (see code/ansible/templates/argocd-apps/).
+#
 # Deployment notes:
 #   - Ingress via Traefik at harbor.apps.home.lab
 #   - TLS terminated at ingress (internal TLS disabled)

@@ -21,6 +21,13 @@
           Set ilo_advanced_license: true in inventory after obtaining license,
           or install Proxmox manually and set proxmox_already_installed: true.
 
+- name: "iLO 4: Render Proxmox answer file from template"
+  ansible.builtin.template:
+    src: proxmox-answer.toml.j2
+    dest: "/tmp/proxmox-answer-{{ inventory_hostname }}.toml"
+    mode: "0600"
+  delegate_to: localhost
+
 - name: "iLO 4: Mount Proxmox ISO via virtual media (Advanced license)"
   community.general.redfish_command:
     baseuri: "{{ ilo_host }}"
@@ -55,7 +62,7 @@
 
 - name: "iLO 4: Wait for Proxmox installation to complete"
   ansible.builtin.wait_for:
-    host: "{{ ilo_host | regex_replace('192\\.168\\.5\\.', '192.168.2.') }}"
+    host: "{{ ilo_host | regex_replace(ilo_mgmt_subnet | regex_escape ~ '\\.', pve_mgmt_subnet ~ '.') }}"
     port: 22
     delay: "{{ ilo_ssh_check_delay }}"
     timeout: "{{ ilo_proxmox_install_timeout }}"

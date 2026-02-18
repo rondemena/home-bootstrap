@@ -5,6 +5,10 @@
 # Task: T064 - Observability: metrics, dashboards, alerting
 # =============================================================================
 #
+# NOTE: Domain-specific values below are defaults for apps.home.lab.
+# Actual domain is overridden via ArgoCD Application helm values
+# configured by Ansible (see code/ansible/templates/argocd-apps/).
+#
 # Deployment notes:
 #   - Prometheus with 30-day retention
 #   - Grafana with ingress at grafana.apps.home.lab

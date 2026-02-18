@@ -3,6 +3,10 @@
 # Chart: jetstack/cert-manager
 # Namespace: cert-manager
 #
+# NOTE: Domain-specific values below are defaults for apps.home.lab.
+# Actual domain is overridden via ArgoCD Application helm values
+# configured by Ansible (see code/ansible/templates/argocd-apps/).
+#
 # Manages TLS certificates for *.apps.home.lab via self-signed
 # ClusterIssuer. CRDs are installed with the Helm chart.
 

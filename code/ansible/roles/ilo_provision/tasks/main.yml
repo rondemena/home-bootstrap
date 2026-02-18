@@ -43,7 +43,7 @@
 # Proxmox Installation via Virtual Media
 - name: Check if Proxmox API is already reachable
   ansible.builtin.uri:
-    url: "https://{{ hostvars[inventory_hostname].ansible_host | default(ilo_host | regex_replace('192\\.168\\.5\\.', '192.168.2.')) }}:8006/api2/json/version"
+    url: "https://{{ hostvars[inventory_hostname].ansible_host | default(ilo_host | regex_replace(ilo_mgmt_subnet | regex_escape ~ '\\.', pve_mgmt_subnet ~ '.')) }}:8006/api2/json/version"
     validate_certs: false
     timeout: 10
   register: pve_api_check

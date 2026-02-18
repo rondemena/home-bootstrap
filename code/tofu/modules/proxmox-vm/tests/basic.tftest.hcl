@@ -12,12 +12,16 @@ variables {
   ip_address      = "192.168.2.100/24"
   gateway         = "192.168.2.1"
   dns_servers     = ["192.168.2.1"]
+  dns_domain      = "example.lab"
   storage_pool    = "local"
   network_bridge  = "vmbr0"
   vlan_id         = 2
   template_vmid   = 9000
   cloud_init_user = "admin"
   ssh_public_key  = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITest test@test"
+  cpu_type        = "x86-64-v2-AES"
+  disk_format     = "raw"
+  tags            = ["test"]
 }
 
 run "validate_variables" {

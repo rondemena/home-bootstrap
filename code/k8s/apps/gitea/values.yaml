@@ -5,6 +5,10 @@
 # Task: T062 - Secondary SDLC stack: lightweight source control
 # =============================================================================
 #
+# NOTE: Domain-specific values below are defaults for apps.home.lab.
+# Actual domain is overridden via ArgoCD Application helm values
+# configured by Ansible (see code/ansible/templates/argocd-apps/).
+#
 # Deployment notes:
 #   - Lightweight Git hosting for learning and comparison
 #   - SQLite database (no external database dependency)

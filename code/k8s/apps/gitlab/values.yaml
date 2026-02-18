@@ -5,6 +5,10 @@
 # Task: T059 - Primary SDLC stack: source control + project management
 # =============================================================================
 #
+# NOTE: Domain-specific values below are defaults for apps.home.lab.
+# Actual domain is overridden via ArgoCD Application helm values
+# configured by Ansible (see code/ansible/templates/argocd-apps/).
+#
 # Deployment notes:
 #   - GitLab CE edition (MIT license) - no EE features
 #   - Ingress handled by cluster Traefik (built-in nginx disabled)

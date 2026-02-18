@@ -8,7 +8,7 @@ resource "proxmox_virtual_environment_vm" "vm" {
 
   description = "Managed by OpenTofu - role: ${var.role}"
 
-  tags = [var.role, "managed-by-tofu"]
+  tags = concat([var.role, "managed-by-tofu"], var.tags)
 
   clone {
     vm_id = var.template_vmid
@@ -17,7 +17,7 @@ resource "proxmox_virtual_environment_vm" "vm" {
 
   cpu {
     cores = var.cores
-    type  = "x86-64-v2-AES"
+    type  = var.cpu_type
   }
 
   memory {
@@ -28,12 +28,12 @@ resource "proxmox_virtual_environment_vm" "vm" {
     interface    = "scsi0"
     size         = var.disk_gb
     datastore_id = var.storage_pool
-    file_format  = "raw"
+    file_format  = var.disk_format
   }
 
   network_device {
     bridge  = var.network_bridge
-    vlan_id = var.vlan_id
+    vlan_id = var.vlan_id > 0 ? var.vlan_id : null
     model   = "virtio"
   }
 
@@ -45,9 +45,12 @@ resource "proxmox_virtual_environment_vm" "vm" {
       }
     }
 
-    dns {
-      servers = var.dns_servers
-      domain  = "home.lab"
+    dynamic "dns" {
+      for_each = length(var.dns_servers) > 0 ? [1] : []
+      content {
+        servers = var.dns_servers
+        domain  = var.dns_domain != "" ? var.dns_domain : null
+      }
     }
 
     user_account {

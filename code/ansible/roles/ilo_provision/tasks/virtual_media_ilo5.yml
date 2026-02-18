@@ -2,6 +2,13 @@
 # Virtual Media mounting for iLO 5 (DL380g10)
 # iLO 5 Standard license supports scripted virtual media
 
+- name: "iLO 5: Render Proxmox answer file from template"
+  ansible.builtin.template:
+    src: proxmox-answer.toml.j2
+    dest: "/tmp/proxmox-answer-{{ inventory_hostname }}.toml"
+    mode: "0600"
+  delegate_to: localhost
+
 - name: "iLO 5: Mount Proxmox ISO via virtual media"
   community.general.redfish_command:
     baseuri: "{{ ilo_host }}"
@@ -36,7 +43,7 @@
 
 - name: "iLO 5: Wait for Proxmox installation to complete"
   ansible.builtin.wait_for:
-    host: "{{ ilo_host | regex_replace('192\\.168\\.5\\.', '192.168.2.') }}"
+    host: "{{ ilo_host | regex_replace(ilo_mgmt_subnet | regex_escape ~ '\\.', pve_mgmt_subnet ~ '.') }}"
     port: 22
     delay: "{{ ilo_ssh_check_delay }}"
     timeout: "{{ ilo_proxmox_install_timeout }}"

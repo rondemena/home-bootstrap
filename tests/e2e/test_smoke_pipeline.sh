@@ -4,9 +4,23 @@ set -euo pipefail
 # CI Pipeline Smoke Test
 # Creates a minimal test project, pushes code, verifies pipeline triggers
 
-GITLAB_URL="${GITLAB_URL:-https://gitlab.apps.home.lab}"
-JENKINS_URL="${JENKINS_URL:-https://jenkins.apps.home.lab}"
-HARBOR_URL="${HARBOR_URL:-https://harbor.apps.home.lab}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+
+# Source .env for environment-specific overrides (DOMAIN, INGRESS_DOMAIN, etc.)
+# When run via test-e2e.sh the .env is already sourced; this allows standalone execution.
+if [[ -f "${REPO_ROOT}/.env" ]]; then
+    # shellcheck disable=SC1091
+    set -a
+    source "${REPO_ROOT}/.env"
+    set +a
+fi
+
+# INGRESS_DOMAIN: derived from DOMAIN if not set directly (both defined in .env)
+INGRESS_DOMAIN="${INGRESS_DOMAIN:-apps.${DOMAIN:-home.lab}}"
+GITLAB_URL="${GITLAB_URL:-https://gitlab.${INGRESS_DOMAIN}}"
+JENKINS_URL="${JENKINS_URL:-https://jenkins.${INGRESS_DOMAIN}}"
+HARBOR_URL="${HARBOR_URL:-https://harbor.${INGRESS_DOMAIN}}"
 GITLAB_TOKEN="${GITLAB_TOKEN:-}"
 TEST_PROJECT="smoke-test-$(date +%s)"
 TIMEOUT=300

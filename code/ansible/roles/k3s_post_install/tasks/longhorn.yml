@@ -1,0 +1,55 @@
+---
+- name: Create longhorn-system namespace
+  ansible.builtin.command:
+    cmd: kubectl create namespace longhorn-system --dry-run=client -o yaml
+  register: longhorn_ns_yaml
+  changed_when: false
+  tags:
+    - longhorn
+
+- name: Apply longhorn-system namespace
+  ansible.builtin.command:
+    cmd: kubectl apply -f -
+    stdin: "{{ longhorn_ns_yaml.stdout }}"
+  register: longhorn_ns_apply
+  changed_when: "'created' in longhorn_ns_apply.stdout"
+  tags:
+    - longhorn
+
+- name: Deploy Longhorn via Helm
+  ansible.builtin.command:
+    cmd: >-
+      helm upgrade --install longhorn longhorn/longhorn
+      --namespace longhorn-system
+      --values {{ k8s_infra_dir }}/longhorn/values.yaml
+      --timeout {{ helm_timeout }}
+      --wait
+  register: longhorn_deploy
+  changed_when: "'STATUS: deployed' in longhorn_deploy.stdout"
+  tags:
+    - longhorn
+
+- name: Wait for Longhorn manager to be ready
+  ansible.builtin.command:
+    cmd: >-
+      kubectl wait --for=condition=ready pod
+      -l app=longhorn-manager
+      -n longhorn-system
+      --timeout=180s
+  changed_when: false
+  tags:
+    - longhorn
+
+- name: Verify Longhorn StorageClass exists
+  ansible.builtin.command:
+    cmd: kubectl get storageclass longhorn
+  register: longhorn_sc
+  changed_when: false
+  tags:
+    - longhorn
+
+- name: Display Longhorn deployment status
+  ansible.builtin.debug:
+    msg: "Longhorn deployed with 2 replicas, default StorageClass enabled"
+  tags:
+    - longhorn
