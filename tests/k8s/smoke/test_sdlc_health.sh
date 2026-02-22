@@ -4,7 +4,7 @@
 # Validates HTTP health endpoints for every SDLC service in the stack
 #
 # Environment variables:
-#   INGRESS_DOMAIN  - Base domain for services (default: apps.home.lab)
+#   INGRESS_DOMAIN  - Base domain for services (default: apps.lab.demena.net)
 #   TIMEOUT         - Per-service HTTP timeout in seconds (default: 30)
 #   SKIP_SECONDARY  - Set to "true" to skip secondary stack (Gitea, Woodpecker)
 
@@ -43,7 +43,7 @@ log_section() { echo -e "\n${BOLD}--- $1 ---${NC}"; }
 
 # Configuration
 # INGRESS_DOMAIN: derived from DOMAIN if not set directly (both defined in .env)
-INGRESS_DOMAIN="${INGRESS_DOMAIN:-apps.${DOMAIN:-home.lab}}"
+INGRESS_DOMAIN="${INGRESS_DOMAIN:-apps.${DOMAIN:-lab.demena.net}}"
 TIMEOUT="${TIMEOUT:-30}"
 SKIP_SECONDARY="${SKIP_SECONDARY:-false}"
 

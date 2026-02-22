@@ -38,7 +38,7 @@ k3s cluster ready
 **Constraints**: DL380g10 primary host (768GB RAM, 40c, 8x1.8TB).
 DL360g9 iLO 4 may require Advanced license for virtual media. Home
 network with VLANs (no BGP). Self-signed TLS acceptable initially.
-**Scale/Scope**: 2 physical servers, 3-6 VMs on DL380, 15+ Kubernetes
+**Scale/Scope**: 2 physical servers, 5 VMs on DL380, 15+ Kubernetes
 workloads, single operator with occasional demo use
 
 ## Constitution Check
@@ -81,12 +81,14 @@ specs/001-bare-metal-sdlc-bootstrap/
 ### Source Code (repository root)
 
 ```text
+.env.example
 code/
 ├── ansible/
 │   ├── inventory/
 │   │   ├── group_vars/
 │   │   │   ├── all.yml
 │   │   │   ├── proxmox.yml
+│   │   │   ├── ilo_targets.yml
 │   │   │   ├── k3s_server.yml
 │   │   │   ├── k3s_agent.yml
 │   │   │   ├── k3s_cluster.yml
@@ -102,10 +104,22 @@ code/
 │   ├── roles/
 │   │   ├── ilo_provision/
 │   │   ├── proxmox_configure/
-│   │   └── cloud_image_template/
-│   ├── files/
-│   │   ├── proxmox-answer-dl380.toml
-│   │   └── proxmox-answer-dl360.toml
+│   │   ├── cloud_image_template/
+│   │   ├── k3s_install/
+│   │   └── k3s_post_install/
+│   ├── templates/
+│   │   ├── argocd-apps/
+│   │   │   ├── gitea.yaml.j2
+│   │   │   ├── gitlab.yaml.j2
+│   │   │   ├── harbor.yaml.j2
+│   │   │   ├── jenkins.yaml.j2
+│   │   │   ├── logging.yaml.j2
+│   │   │   ├── minio.yaml.j2
+│   │   │   ├── monitoring.yaml.j2
+│   │   │   ├── sealed-secrets.yaml.j2
+│   │   │   ├── coredns.yaml.j2
+│   │   │   └── woodpecker.yaml.j2
+│   │   └── argocd-install-values.yaml.j2
 │   ├── ansible.cfg
 │   └── requirements.yml
 ├── tofu/
@@ -132,6 +146,8 @@ code/
 │   │       ├── jenkins.yaml             # Primary: CI/CD
 │   │       ├── harbor.yaml              # Primary: registry
 │   │       ├── minio.yaml              # State backend (S3)
+│   │       ├── sealed-secrets.yaml      # Infra: encrypted secrets
+│   │       ├── coredns.yaml             # Infra: local DNS
 │   │       ├── gitea.yaml               # Secondary: lightweight SCM
 │   │       ├── woodpecker.yaml          # Secondary: lightweight CI
 │   │       ├── monitoring.yaml
@@ -145,7 +161,9 @@ code/
 │   │   ├── cert-manager/
 │   │   │   ├── values.yaml
 │   │   │   └── cluster-issuer.yaml
-│   │   └── sealed-secrets/
+│   │   ├── sealed-secrets/
+│   │   │   └── values.yaml
+│   │   └── coredns/
 │   │       └── values.yaml
 │   └── apps/
 │       ├── gitlab/                      # Primary
@@ -225,12 +243,14 @@ resource contention with GitLab and observability stack:
 
 | VM | VMID | Role | CPU | RAM | Disk | VLAN 2 IP |
 |----|------|------|-----|-----|------|-----------|
-| k3s-server-01 | 100 | k3s control plane | 8 | 16GB | 100GB | 192.168.2.100 |
+| k3s-server-01 | 100 | k3s control plane (initial) | 8 | 16GB | 100GB | 192.168.2.100 |
+| k3s-server-02 | 101 | k3s control plane | 4 | 8GB | 50GB | 192.168.2.101 |
+| k3s-server-03 | 102 | k3s control plane | 4 | 8GB | 50GB | 192.168.2.102 |
 | k3s-agent-01 | 200 | k3s worker (primary workloads) | 8 | 64GB | 200GB | 192.168.2.200 |
 | k3s-agent-02 | 201 | k3s worker (observability + secondary) | 8 | 64GB | 200GB | 192.168.2.201 |
 
-**Total allocated**: 24 cores / 144GB RAM / 500GB disk
-**Remaining on host**: 16 cores / 624GB RAM for future VMs
+**Total allocated**: 32 cores / 160GB RAM / 600GB disk
+**Remaining on host**: 8 cores / 608GB RAM for future VMs
 
 ## SDLC Toolchain Architecture
 

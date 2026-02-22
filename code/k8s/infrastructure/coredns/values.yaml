@@ -1,0 +1,64 @@
+---
+# CoreDNS Helm values — External authoritative DNS for lab domain
+# Chart: coredns/coredns
+# Namespace: kube-system
+#
+# NOTE: Domain-specific values below are defaults for apps.home.lab.
+# Actual domain is overridden via ArgoCD Application helm values
+# configured by Ansible (see code/ansible/templates/argocd-apps/).
+#
+# This is a SEPARATE CoreDNS instance from the k3s-internal CoreDNS.
+# It serves wildcard *.apps.lab.demena.net resolving to the Traefik
+# LoadBalancer IP, exposed on the network via MetalLB for DHCP
+# distribution to lab VLANs.
+
+replicaCount: 2
+
+serviceType: LoadBalancer
+
+service:
+  name: coredns-external
+
+# Not a cluster-internal DNS service — this faces the lab network
+isClusterService: false
+
+servers:
+  - zones:
+      - zone: .
+    port: 53
+    plugins:
+      - name: errors
+      - name: health
+        configBlock: |-
+          lameduck 5s
+      - name: ready
+      # Wildcard: *.apps.lab.demena.net -> Traefik LB IP
+      - name: template
+        parameters: IN A apps.lab.demena.net
+        configBlock: |-
+          match ^.*\.apps\.lab\.demena\.net\.$
+          answer "{{ .Name }} 60 IN A 192.168.2.240"
+          fallthrough
+      # Apex: apps.lab.demena.net -> Traefik LB IP
+      - name: template
+        parameters: IN A lab.demena.net
+        configBlock: |-
+          match ^lab\.demena\.net\.$
+          answer "lab.demena.net. 60 IN A 192.168.2.240"
+          fallthrough
+      # Forward everything else to upstream resolver
+      - name: forward
+        parameters: ". /etc/resolv.conf"
+      - name: cache
+        parameters: 30
+      - name: loop
+      - name: reload
+      - name: loadbalance
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi

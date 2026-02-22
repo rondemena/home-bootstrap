@@ -9,7 +9,7 @@
 #   GITLAB_TOKEN    - GitLab admin personal access token (api scope)
 #
 # Optional environment variables:
-#   INGRESS_DOMAIN  - Base domain (default: apps.home.lab)
+#   INGRESS_DOMAIN  - Base domain (default: apps.lab.demena.net)
 #   GITLAB_USER     - GitLab username for push (default: root)
 #   HARBOR_USER     - Harbor admin username (default: admin)
 #   HARBOR_PASS     - Harbor admin password (default: Harbor12345)
@@ -52,7 +52,7 @@ log_section() { echo -e "\n${BOLD}--- $1 ---${NC}"; }
 
 # Configuration
 # INGRESS_DOMAIN: derived from DOMAIN if not set directly (both defined in .env)
-INGRESS_DOMAIN="${INGRESS_DOMAIN:-apps.${DOMAIN:-home.lab}}"
+INGRESS_DOMAIN="${INGRESS_DOMAIN:-apps.${DOMAIN:-lab.demena.net}}"
 GITLAB_URL="https://gitlab.${INGRESS_DOMAIN}"
 JENKINS_URL="https://jenkins.${INGRESS_DOMAIN}"
 HARBOR_URL="https://harbor.${INGRESS_DOMAIN}"

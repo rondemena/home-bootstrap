@@ -36,6 +36,8 @@ log_info() { echo -e "[INFO] $1"; }
 # Override individual IPs via environment: VM_IP_K3S_SERVER_01, VM_IP_K3S_AGENT_01, etc.
 declare -A VMS=(
     ["k3s-server-01"]="${VM_IP_K3S_SERVER_01:-192.168.2.100}"
+    ["k3s-server-02"]="${VM_IP_K3S_SERVER_02:-192.168.2.101}"
+    ["k3s-server-03"]="${VM_IP_K3S_SERVER_03:-192.168.2.102}"
     ["k3s-agent-01"]="${VM_IP_K3S_AGENT_01:-192.168.2.200}"
     ["k3s-agent-02"]="${VM_IP_K3S_AGENT_02:-192.168.2.201}"
 )

@@ -1,0 +1,76 @@
+---
+# ArgoCD Application: CoreDNS (External Lab DNS)
+# Stack: Infrastructure — authoritative DNS for lab domain
+# Chart: coredns/coredns ~1.30
+# Service: coredns-external (MetalLB LoadBalancer)
+#
+# NOTE: This file is no longer applied directly. The Ansible playbook
+# templates code/ansible/templates/argocd-apps/coredns.yaml.j2 with
+# domain variables and applies the rendered output via kubectl.
+# This file is preserved as documentation of the default values.
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: coredns-external
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: infrastructure
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://coredns.github.io/helm
+    chart: coredns
+    targetRevision: "~1.30"
+    helm:
+      values: |
+        replicaCount: 2
+        serviceType: LoadBalancer
+        service:
+          name: coredns-external
+        isClusterService: false
+        servers:
+          - zones:
+              - zone: .
+            port: 53
+            plugins:
+              - name: errors
+              - name: health
+                configBlock: |-
+                  lameduck 5s
+              - name: ready
+              - name: template
+                parameters: IN A apps.lab.demena.net
+                configBlock: |-
+                  match ^.*\.apps\.lab\.demena\.net\.$
+                  answer "{{ .Name }} 60 IN A 192.168.2.240"
+                  fallthrough
+              - name: template
+                parameters: IN A lab.demena.net
+                configBlock: |-
+                  match ^lab\.demena\.net\.$
+                  answer "lab.demena.net. 60 IN A 192.168.2.240"
+                  fallthrough
+              - name: forward
+                parameters: ". /etc/resolv.conf"
+              - name: cache
+                parameters: 30
+              - name: loop
+              - name: reload
+              - name: loadbalance
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

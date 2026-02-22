@@ -27,12 +27,19 @@
   tags:
     - k3s-server
 
+- name: Determine if this is the first server node
+  ansible.builtin.set_fact:
+    k3s_is_first_server: "{{ inventory_hostname == groups['k3s_server'][0] }}"
+  tags:
+    - k3s-server
+
 - name: Display k3s installation status
   ansible.builtin.debug:
     msg: >-
       k3s installed: {{ k3s_binary.stat.exists }},
       version match: {{ not k3s_install_needed }},
-      target version: {{ k3s_version }}
+      target version: {{ k3s_version }},
+      first server: {{ k3s_is_first_server }}
   tags:
     - k3s-server
 
@@ -46,15 +53,38 @@
   tags:
     - k3s-server
 
-- name: Install k3s server
+# ---------------------------------------------------------------------------
+# First server node: initialize the HA cluster with --cluster-init
+# ---------------------------------------------------------------------------
+- name: Install k3s server (first node - cluster init)
   ansible.builtin.command:
     cmd: /tmp/k3s-install.sh
   environment:
     INSTALL_K3S_VERSION: "{{ k3s_version }}"
-    INSTALL_K3S_EXEC: "server {{ k3s_server_args | join(' ') }}"
+    INSTALL_K3S_EXEC: "server --cluster-init {{ k3s_server_args | join(' ') }}"
   register: k3s_server_install
   changed_when: k3s_server_install.rc == 0
-  when: k3s_install_needed | bool
+  when:
+    - k3s_install_needed | bool
+    - k3s_is_first_server | bool
+  tags:
+    - k3s-server
+
+# ---------------------------------------------------------------------------
+# Additional server nodes: join the existing HA cluster
+# ---------------------------------------------------------------------------
+- name: Install k3s server (additional nodes - join cluster)
+  ansible.builtin.command:
+    cmd: /tmp/k3s-install.sh
+  environment:
+    INSTALL_K3S_VERSION: "{{ k3s_version }}"
+    INSTALL_K3S_EXEC: "server --server https://{{ hostvars[groups['k3s_server'][0]]['ansible_host'] }}:6443 {{ k3s_server_args | join(' ') }}"
+    K3S_TOKEN: "{{ hostvars[groups['k3s_server'][0]]['k3s_node_token'] }}"
+  register: k3s_server_join
+  changed_when: k3s_server_join.rc == 0
+  when:
+    - k3s_install_needed | bool
+    - not (k3s_is_first_server | bool)
   tags:
     - k3s-server
 

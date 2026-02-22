@@ -11,7 +11,7 @@ ansible_ssh_private_key_file: ~/.ssh/id_ed25519
 ansible_python_interpreter: /usr/bin/python3
 
 # DNS and domain
-domain: "{{ lookup('env', 'DOMAIN') | default('home.lab', true) }}"
+domain: "{{ lookup('env', 'DOMAIN') | default('lab.demena.net', true) }}"
 ingress_domain: "{{ lookup('env', 'INGRESS_DOMAIN') | default('apps.' + domain, true) }}"
 dns_servers:
   - "{{ lookup('env', 'DNS_SERVER') | default('192.168.2.1', true) }}"

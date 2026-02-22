@@ -23,6 +23,30 @@ vm_definitions = {
     dns_servers = ["192.168.2.1"]
     vlan_id     = 2
   }
+  "k3s-server-02" = {
+    vmid        = 101
+    name        = "k3s-server-02"
+    role        = "k3s-server"
+    cores       = 4
+    memory_mb   = 8192
+    disk_gb     = 50
+    ip_address  = "192.168.2.101/24"
+    gateway     = "192.168.2.1"
+    dns_servers = ["192.168.2.1"]
+    vlan_id     = 2
+  }
+  "k3s-server-03" = {
+    vmid        = 102
+    name        = "k3s-server-03"
+    role        = "k3s-server"
+    cores       = 4
+    memory_mb   = 8192
+    disk_gb     = 50
+    ip_address  = "192.168.2.102/24"
+    gateway     = "192.168.2.1"
+    dns_servers = ["192.168.2.1"]
+    vlan_id     = 2
+  }
   "k3s-agent-01" = {
     vmid        = 200
     name        = "k3s-agent-01"

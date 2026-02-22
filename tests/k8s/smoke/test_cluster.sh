@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Smoke test for k3s cluster (US3)
 # Usage: ./tests/k8s/smoke/test_cluster.sh
-# Validates: all 3 nodes Ready, kube-system pods Running, CoreDNS resolving, Traefik running
+# Validates: all 5 nodes Ready (3 servers + 2 agents), kube-system pods Running, CoreDNS resolving, Traefik running
 # Env: KUBECONFIG (optional, defaults to ~/.kube/config)
 
 set -euo pipefail
@@ -36,9 +36,9 @@ log_fail() { echo -e "${RED}[FAIL]${NC} $1"; ((FAIL++)); }
 log_skip() { echo -e "${YELLOW}[SKIP]${NC} $1"; ((SKIP++)); }
 log_info() { echo -e "${CYAN}[INFO]${NC} $1"; }
 
-# Expected cluster nodes
-EXPECTED_NODES=("k3s-server-01" "k3s-agent-01" "k3s-agent-02")
-EXPECTED_NODE_COUNT=3
+# Expected cluster nodes (3 HA servers + 2 agents)
+EXPECTED_NODES=("k3s-server-01" "k3s-server-02" "k3s-server-03" "k3s-agent-01" "k3s-agent-02")
+EXPECTED_NODE_COUNT=5
 
 # ---------------------------------------------------------------------------
 # Preflight: verify kubectl and kubeconfig are available

@@ -1,7 +1,7 @@
 ---
 # Playbook: k3s Cluster Installation
 # Target: k3s_server (first), k3s_agent (second), localhost (kubeconfig)
-# Purpose: Install k3s server and agent nodes, fetch kubeconfig, verify cluster
+# Purpose: Install k3s HA cluster with embedded etcd (3 servers) and agent nodes
 #
 # Usage:
 #   make bootstrap-k3s
@@ -12,6 +12,12 @@
 #   - k3s install script is natively idempotent (re-runs are safe)
 #   - Agent join is idempotent (re-joining an existing member is a no-op)
 #
+# HA Notes:
+#   - Servers are installed serially (serial: 1) to ensure ordered initialization
+#   - First server uses --cluster-init to bootstrap embedded etcd
+#   - Subsequent servers join using the token from the first server
+#   - Agents join after all servers are ready
+#
 # Tags:
 #   k3s-server   - Install k3s server only
 #   k3s-agent    - Install k3s agents only
@@ -20,10 +26,13 @@
 #   verify       - Verify cluster health
 
 # ============================================================================
-# Play 1: Install k3s server on the control plane node
+# Play 1: Install k3s servers serially for HA cluster init
 # ============================================================================
-- name: Install k3s server
+# serial: 1 ensures the first server initializes the cluster with --cluster-init
+# before subsequent servers attempt to join with --server.
+- name: Install k3s servers
   hosts: k3s_server
+  serial: 1
   gather_facts: true
   tags:
     - k3s-server
@@ -86,10 +95,10 @@
     - role: k3s_install
 
 # ============================================================================
-# Play 3: Fetch kubeconfig from server to workstation
+# Play 3: Fetch kubeconfig from first server to workstation
 # ============================================================================
 - name: Fetch kubeconfig to workstation
-  hosts: k3s_server
+  hosts: "{{ groups['k3s_server'][0] }}"
   gather_facts: false
   tags:
     - kubeconfig
@@ -134,10 +143,10 @@
         - kubeconfig
 
 # ============================================================================
-# Play 4: Verify cluster health
+# Play 4: Verify cluster health (run from first server only)
 # ============================================================================
 - name: Verify k3s cluster
-  hosts: k3s_server
+  hosts: "{{ groups['k3s_server'][0] }}"
   gather_facts: false
   tags:
     - verify
@@ -169,9 +178,10 @@
       ansible.builtin.assert:
         that:
           - "'NotReady' not in k3s_node_status.stdout"
-          - "k3s_node_status.stdout_lines | length >= 3"
+          - "k3s_node_status.stdout_lines | length >= (groups['k3s_server'] | length + groups['k3s_agent'] | length)"
         fail_msg: >-
-          Not all nodes are Ready. Expected at least 3 nodes.
+          Not all nodes are Ready.
+          Expected at least {{ groups['k3s_server'] | length + groups['k3s_agent'] | length }} nodes.
           Current status: {{ k3s_node_status.stdout }}
         success_msg: >-
           All {{ k3s_node_status.stdout_lines | length }} nodes are Ready

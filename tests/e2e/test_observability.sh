@@ -8,7 +8,7 @@
 #   3. Loki is receiving logs (LogQL query returns results)
 #
 # Optional environment variables:
-#   INGRESS_DOMAIN    - Base domain (default: apps.home.lab)
+#   INGRESS_DOMAIN    - Base domain (default: apps.lab.demena.net)
 #   GRAFANA_USER      - Grafana admin username (default: admin)
 #   GRAFANA_PASS      - Grafana admin password (default: admin)
 #   TIMEOUT           - Per-request timeout in seconds (default: 30)
@@ -48,7 +48,7 @@ log_section() { echo -e "\n${BOLD}--- $1 ---${NC}"; }
 
 # Configuration
 # INGRESS_DOMAIN: derived from DOMAIN if not set directly (both defined in .env)
-INGRESS_DOMAIN="${INGRESS_DOMAIN:-apps.${DOMAIN:-home.lab}}"
+INGRESS_DOMAIN="${INGRESS_DOMAIN:-apps.${DOMAIN:-lab.demena.net}}"
 PROMETHEUS_URL="https://prometheus.${INGRESS_DOMAIN}"
 GRAFANA_URL="https://grafana.${INGRESS_DOMAIN}"
 LOKI_URL="https://loki.${INGRESS_DOMAIN}"

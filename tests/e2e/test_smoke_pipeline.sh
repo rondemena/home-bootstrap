@@ -17,7 +17,7 @@ if [[ -f "${REPO_ROOT}/.env" ]]; then
 fi
 
 # INGRESS_DOMAIN: derived from DOMAIN if not set directly (both defined in .env)
-INGRESS_DOMAIN="${INGRESS_DOMAIN:-apps.${DOMAIN:-home.lab}}"
+INGRESS_DOMAIN="${INGRESS_DOMAIN:-apps.${DOMAIN:-lab.demena.net}}"
 GITLAB_URL="${GITLAB_URL:-https://gitlab.${INGRESS_DOMAIN}}"
 JENKINS_URL="${JENKINS_URL:-https://jenkins.${INGRESS_DOMAIN}}"
 HARBOR_URL="${HARBOR_URL:-https://harbor.${INGRESS_DOMAIN}}"

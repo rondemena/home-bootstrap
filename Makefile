@@ -27,7 +27,7 @@ TESTS_DIR    := tests
 # ---------------------------------------------------------------------------
 # Configurable defaults (override via .env or CLI)
 # ---------------------------------------------------------------------------
-DOMAIN          ?= home.lab
+DOMAIN          ?= lab.demena.net
 INGRESS_DOMAIN  ?= apps.$(DOMAIN)
 PVE_API_URL     ?= https://192.168.2.11:8006/
 PVE_NODE        ?= pve-01
