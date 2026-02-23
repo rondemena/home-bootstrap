@@ -1,0 +1,13 @@
+---
+# Cloud image template defaults
+cloud_image_url: "https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img"
+cloud_image_checksum: "sha256:https://cloud-images.ubuntu.com/noble/current/SHA256SUMS"
+cloud_image_dest: "/var/lib/vz/template/iso"
+cloud_image_filename: "noble-server-cloudimg-amd64.img"
+
+template_vmid: 9000
+template_name: "ubuntu-2404-cloud"
+template_memory: 2048
+template_cores: 2
+template_storage: "local"
+template_bridge: "vmbr0"

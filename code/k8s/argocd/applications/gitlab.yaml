@@ -1,0 +1,64 @@
+---
+# ArgoCD Application: GitLab CE
+# Stack: Primary — source control and project management
+# Chart: gitlab/gitlab ~17.0
+# Ingress: gitlab.apps.home.lab
+#
+# NOTE: This file is no longer applied directly. The Ansible playbook
+# templates code/ansible/templates/argocd-apps/gitlab.yaml.j2 with
+# domain variables and applies the rendered output via kubectl.
+# This file is preserved as documentation of the default values.
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gitlab
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: sdlc
+    stack: primary
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://charts.gitlab.io/
+    chart: gitlab
+    targetRevision: "~17.0"
+    helm:
+      valueFiles: []
+      values: |
+        global:
+          hosts:
+            domain: apps.home.lab
+            gitlab:
+              name: gitlab.apps.home.lab
+          edition: ce
+          ingress:
+            class: traefik
+            annotations:
+              cert-manager.io/cluster-issuer: selfsigned-issuer
+            configureCertmanager: false
+            tls:
+              enabled: true
+          time_zone: UTC
+        certmanager:
+          install: false
+        nginx-ingress:
+          enabled: false
+        prometheus:
+          install: false
+        registry:
+          enabled: false
+        gitlab-runner:
+          install: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: gitlab
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

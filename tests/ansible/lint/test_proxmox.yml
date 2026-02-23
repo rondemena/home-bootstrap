@@ -1,0 +1,30 @@
+---
+# Lint validation test for Proxmox playbooks
+# Run: ansible-lint code/ansible/playbooks/01-proxmox-configure.yml
+#      ansible-lint code/ansible/playbooks/02-cloud-image-template.yml
+
+- name: "Lint target: Proxmox playbooks"
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Verify Proxmox configure playbook exists
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/../../code/ansible/playbooks/01-proxmox-configure.yml"
+      register: proxmox_playbook
+
+    - name: Assert Proxmox configure playbook is present
+      ansible.builtin.assert:
+        that:
+          - proxmox_playbook.stat.exists
+        fail_msg: "Proxmox configure playbook not found"
+
+    - name: Verify cloud image template playbook exists
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/../../code/ansible/playbooks/02-cloud-image-template.yml"
+      register: cloud_playbook
+
+    - name: Assert cloud image template playbook is present
+      ansible.builtin.assert:
+        that:
+          - cloud_playbook.stat.exists
+        fail_msg: "Cloud image template playbook not found"

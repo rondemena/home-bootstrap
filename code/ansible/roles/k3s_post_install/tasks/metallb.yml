@@ -1,0 +1,79 @@
+---
+- name: Create metallb-system namespace
+  ansible.builtin.command:
+    cmd: kubectl create namespace metallb-system --dry-run=client -o yaml
+  register: metallb_ns_yaml
+  changed_when: false
+  tags:
+    - metallb
+
+- name: Apply metallb-system namespace
+  ansible.builtin.command:
+    cmd: kubectl apply -f -
+    stdin: "{{ metallb_ns_yaml.stdout }}"
+  register: metallb_ns_apply
+  changed_when: "'created' in metallb_ns_apply.stdout"
+  tags:
+    - metallb
+
+- name: Deploy MetalLB via Helm
+  ansible.builtin.command:
+    cmd: >-
+      helm upgrade --install metallb metallb/metallb
+      --namespace metallb-system
+      --values {{ k8s_infra_dir }}/metallb/values.yaml
+      --timeout {{ helm_timeout }}
+      --wait
+  register: metallb_deploy
+  changed_when: "'STATUS: deployed' in metallb_deploy.stdout"
+  tags:
+    - metallb
+
+- name: Wait for MetalLB controller to be ready
+  ansible.builtin.command:
+    cmd: >-
+      kubectl wait --for=condition=ready pod
+      -l app.kubernetes.io/component=controller
+      -n metallb-system
+      --timeout=120s
+  changed_when: false
+  tags:
+    - metallb
+
+- name: Wait for MetalLB webhook to be ready
+  ansible.builtin.command:
+    cmd: >-
+      kubectl wait --for=condition=ready pod
+      -l component=controller
+      -n metallb-system
+      --timeout=120s
+  changed_when: false
+  failed_when: false
+  tags:
+    - metallb
+
+- name: Wait for MetalLB CRDs to be established
+  ansible.builtin.command:
+    cmd: >-
+      kubectl wait --for=condition=Established
+      crd/ipaddresspools.metallb.io
+      --timeout=60s
+  changed_when: false
+  tags:
+    - metallb
+
+- name: Apply MetalLB IP pool configuration
+  ansible.builtin.command:
+    cmd: kubectl apply -f {{ k8s_infra_dir }}/metallb/ip-pool.yaml
+  register: metallb_pool_apply
+  changed_when: >-
+    'created' in metallb_pool_apply.stdout or
+    'configured' in metallb_pool_apply.stdout
+  tags:
+    - metallb
+
+- name: Display MetalLB deployment status
+  ansible.builtin.debug:
+    msg: "MetalLB deployed with IP pool {{ metallb_ip_range | default('see ip-pool.yaml') }}"
+  tags:
+    - metallb

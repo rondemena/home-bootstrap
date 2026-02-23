@@ -1,0 +1,19 @@
+---
+- name: Remove Proxmox enterprise repository
+  ansible.builtin.apt_repository:
+    repo: "deb https://enterprise.proxmox.com/debian/pve bookworm pve-enterprise"
+    state: absent
+    filename: pve-enterprise
+  when: not pve_enterprise_repo
+
+- name: Add Proxmox no-subscription repository
+  ansible.builtin.apt_repository:
+    repo: "deb http://download.proxmox.com/debian/pve bookworm pve-no-subscription"
+    state: present
+    filename: pve-no-subscription
+  when: pve_no_subscription_repo
+
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600

@@ -1,0 +1,225 @@
+# =============================================================================
+# Jenkins Helm Values
+# Chart: jenkins/jenkins
+# Repository: https://charts.jenkins.io/
+# Task: T060 - Primary SDLC stack: CI/CD pipelines
+# =============================================================================
+#
+# NOTE: Domain-specific values below are defaults for apps.home.lab.
+# Actual domain is overridden via ArgoCD Application helm values
+# configured by Ansible (see code/ansible/templates/argocd-apps/).
+#
+# Deployment notes:
+#   - Controller ingress via Traefik at jenkins.apps.home.lab
+#   - Persistent home directory on Longhorn (50Gi)
+#   - Jenkins Configuration as Code (JCasC) for declarative setup
+#   - Kubernetes cloud plugin for ephemeral build agents
+#   - GitLab plugin for webhook-triggered pipelines
+#   - Harbor credentials for container image push
+# =============================================================================
+
+# -- Jenkins controller configuration
+controller:
+  # -- Container image tag (pin for reproducibility)
+  # image: jenkins/jenkins
+  # tag: "2.440.3-lts-jdk17"
+
+  # -- Resource allocation for the Jenkins controller
+  resources:
+    requests:
+      cpu: "1"
+      memory: 2Gi
+    limits:
+      cpu: "4"
+      memory: 8Gi
+
+  # -- Java options for the JVM
+  javaOpts: >-
+    -Xms2g
+    -Xmx4g
+    -Djenkins.install.runSetupWizard=false
+
+  # -- Admin credentials
+  # The admin password is loaded from a Kubernetes secret.
+  # Create with: kubectl create secret generic jenkins-admin-password \
+  #   --from-literal=jenkins-admin-password=<password> -n jenkins
+  # Then seal with kubeseal
+  admin:
+    existingSecret: jenkins-admin-password
+
+  # -- Ingress configuration via Traefik
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    hostName: jenkins.apps.home.lab
+    annotations:
+      cert-manager.io/cluster-issuer: selfsigned-issuer
+      traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    tls:
+      - secretName: jenkins-tls
+        hosts:
+          - jenkins.apps.home.lab
+
+  # -- Install required plugins
+  installPlugins:
+    - kubernetes:latest
+    - git:latest
+    - gitlab-plugin:latest
+    - docker-workflow:latest
+    - pipeline-stage-view:latest
+    - configuration-as-code:latest
+    - workflow-aggregator:latest
+    - credentials-binding:latest
+    - pipeline-utility-steps:latest
+    - antisamy-markup-formatter:latest
+
+  # -- Additional plugins for enhanced functionality
+  additionalPlugins:
+    - job-dsl:latest
+    - blueocean:latest
+    - prometheus:latest
+
+  # -- Jenkins Configuration as Code (JCasC)
+  JCasC:
+    defaultConfig: true
+    configScripts:
+      # -- Security realm: local Jenkins user database
+      security-config: |
+        jenkins:
+          securityRealm:
+            local:
+              allowsSignup: false
+              users:
+                - id: "admin"
+                  name: "Administrator"
+          authorizationStrategy:
+            loggedInUsersCanDoAnything:
+              allowAnonymousRead: false
+
+      # -- Kubernetes cloud for ephemeral build agents
+      kubernetes-cloud: |
+        jenkins:
+          clouds:
+            - kubernetes:
+                name: "kubernetes"
+                serverUrl: "https://kubernetes.default.svc"
+                namespace: "jenkins"
+                jenkinsUrl: "http://jenkins.jenkins.svc.cluster.local:8080"
+                jenkinsTunnel: "jenkins-agent.jenkins.svc.cluster.local:50000"
+                containerCapStr: "10"
+                maxRequestsPerHostStr: "32"
+                retentionTimeout: 5
+                waitForPodSec: 600
+                templates:
+                  - name: "default-agent"
+                    namespace: "jenkins"
+                    label: "jenkins-agent"
+                    nodeUsageMode: NORMAL
+                    serviceAccount: "jenkins"
+                    containers:
+                      - name: "jnlp"
+                        image: "jenkins/inbound-agent:latest"
+                        workingDir: "/home/jenkins/agent"
+                        resourceRequestCpu: "500m"
+                        resourceRequestMemory: "512Mi"
+                        resourceLimitCpu: "2"
+                        resourceLimitMemory: "2Gi"
+                    volumes:
+                      - emptyDirVolume:
+                          mountPath: "/tmp"
+                          memory: false
+                    yamlMergeStrategy: "override"
+                    idleMinutes: 5
+                  - name: "docker-agent"
+                    namespace: "jenkins"
+                    label: "docker"
+                    nodeUsageMode: EXCLUSIVE
+                    serviceAccount: "jenkins"
+                    containers:
+                      - name: "jnlp"
+                        image: "jenkins/inbound-agent:latest"
+                        workingDir: "/home/jenkins/agent"
+                        resourceRequestCpu: "500m"
+                        resourceRequestMemory: "512Mi"
+                        resourceLimitCpu: "1"
+                        resourceLimitMemory: "1Gi"
+                      - name: "docker"
+                        image: "docker:27-dind"
+                        privileged: true
+                        workingDir: "/home/jenkins/agent"
+                        resourceRequestCpu: "500m"
+                        resourceRequestMemory: "1Gi"
+                        resourceLimitCpu: "2"
+                        resourceLimitMemory: "4Gi"
+                        envVars:
+                          - envVar:
+                              key: "DOCKER_TLS_CERTDIR"
+                              value: ""
+                    volumes:
+                      - emptyDirVolume:
+                          mountPath: "/var/lib/docker"
+                          memory: false
+                    yamlMergeStrategy: "override"
+                    idleMinutes: 10
+
+      # -- GitLab plugin configuration
+      gitlab-config: |
+        unclassified:
+          gitLabConnectionConfig:
+            connections:
+              - name: "GitLab Home Lab"
+                url: "https://gitlab.apps.home.lab"
+                apiTokenId: "gitlab-api-token"
+                clientBuilderId: "autodetect"
+                ignoreCertErrors: true
+            useAuthenticatedEndpoint: true
+
+      # -- Credentials for Harbor registry and GitLab API
+      credentials-config: |
+        credentials:
+          system:
+            domainCredentials:
+              - credentials:
+                  # -- Harbor registry credentials for docker push
+                  - usernamePassword:
+                      scope: GLOBAL
+                      id: "harbor-registry"
+                      description: "Harbor registry credentials"
+                      username: "admin"
+                      password: "${HARBOR_ADMIN_PASSWORD:-changeit}"
+                  # -- GitLab API token for webhook and repo access
+                  - string:
+                      scope: GLOBAL
+                      id: "gitlab-api-token"
+                      description: "GitLab API Token"
+                      secret: "${GITLAB_API_TOKEN:-placeholder}"
+
+  # -- Service account for Kubernetes plugin
+  serviceAccount:
+    create: true
+    name: jenkins
+
+  # -- Service type
+  serviceType: ClusterIP
+
+# -- Persistence for Jenkins home directory
+persistence:
+  enabled: true
+  storageClass: longhorn
+  size: 50Gi
+  accessMode: ReadWriteOnce
+
+# -- Agent configuration (used by Kubernetes plugin)
+agent:
+  enabled: true
+  # -- Default container for JNLP agents
+  image:
+    repository: jenkins/inbound-agent
+    tag: latest
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: "2"
+      memory: 2Gi

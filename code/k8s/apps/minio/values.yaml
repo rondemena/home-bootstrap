@@ -1,0 +1,67 @@
+---
+# MinIO Helm values for OpenTofu state backend
+# Chart: minio/minio
+# Namespace: minio
+#
+# NOTE: Domain-specific values below are defaults for apps.home.lab.
+# Actual domain is overridden via ArgoCD Application helm values
+# configured by Ansible (see code/ansible/templates/argocd-apps/).
+
+# -- Deployment mode (standalone for home lab)
+mode: standalone
+
+# -- Root credentials (use Sealed Secret in production)
+# Create secret: kubectl create secret generic minio-credentials \
+#   --from-literal=rootUser=admin \
+#   --from-literal=rootPassword=<password> -n minio
+existingSecret: minio-credentials
+
+# -- Persistence
+persistence:
+  enabled: true
+  storageClass: longhorn
+  size: 20Gi
+  accessMode: ReadWriteOnce
+
+# -- Ingress
+ingress:
+  enabled: true
+  ingressClassName: traefik
+  annotations:
+    cert-manager.io/cluster-issuer: selfsigned-issuer
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+  hosts:
+    - minio.apps.home.lab
+  tls:
+    - secretName: minio-tls
+      hosts:
+        - minio.apps.home.lab
+
+# -- Console ingress
+consoleIngress:
+  enabled: true
+  ingressClassName: traefik
+  annotations:
+    cert-manager.io/cluster-issuer: selfsigned-issuer
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+  hosts:
+    - minio-console.apps.home.lab
+  tls:
+    - secretName: minio-console-tls
+      hosts:
+        - minio-console.apps.home.lab
+
+# -- Resources
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 1Gi
+
+# -- Create default bucket for tofu state
+buckets:
+  - name: tofu-state
+    policy: none
+    purge: false

@@ -1,0 +1,75 @@
+---
+# ArgoCD Application: Woodpecker CI
+# Stack: Secondary — lightweight CI/CD for learning
+# Chart: woodpecker/woodpecker ~1.0
+# Ingress: ci.apps.home.lab
+#
+# NOTE: This file is no longer applied directly. The Ansible playbook
+# templates code/ansible/templates/argocd-apps/woodpecker.yaml.j2 with
+# domain variables and applies the rendered output via kubectl.
+# This file is preserved as documentation of the default values.
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: woodpecker
+  namespace: argocd
+  annotations:
+    stack: secondary
+  labels:
+    app.kubernetes.io/part-of: sdlc
+    stack: secondary
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://woodpecker-ci.org/charts
+    chart: woodpecker
+    targetRevision: "~1.0"
+    helm:
+      valueFiles: []
+      values: |
+        server:
+          ingress:
+            enabled: true
+            ingressClassName: traefik
+            annotations:
+              cert-manager.io/cluster-issuer: selfsigned-issuer
+            hosts:
+              - host: ci.apps.home.lab
+                paths:
+                  - path: /
+                    pathType: Prefix
+            tls:
+              - secretName: woodpecker-tls
+                hosts:
+                  - ci.apps.home.lab
+          env:
+            WOODPECKER_HOST: https://ci.apps.home.lab
+            WOODPECKER_OPEN: "false"
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+        agent:
+          replicaCount: 2
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: woodpecker
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

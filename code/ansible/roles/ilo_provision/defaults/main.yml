@@ -1,0 +1,29 @@
+---
+# iLO provisioning defaults
+ilo_bios_settings:
+  ProcVirtualization: Enabled          # VT-x
+  IntelProcVtd: Enabled                # VT-d
+  BootMode: Uefi                       # UEFI boot mode
+  UefiOptimizedBoot: Enabled
+  EnergyPerfBias: MaxPerf
+  IntelHyperthreading: Enabled
+
+# Timeouts
+ilo_proxmox_install_timeout: 1800     # 30 minutes for Proxmox install
+ilo_ssh_check_delay: 60               # Wait 60s before first SSH check
+ilo_ssh_check_retries: 30             # Retry SSH 30 times (30 min total at 60s intervals)
+
+# Virtual media settings
+ilo_virtual_media_device_index: 2     # CD/DVD slot
+
+# Network mapping: derive Proxmox management IP from iLO IP
+# Override these if your iLO and management networks use different subnets
+ilo_mgmt_subnet: "192.168.5"
+pve_mgmt_subnet: "192.168.2"
+
+# Proxmox answer file template variables
+pve_admin_email: ""
+pve_timezone: "America/New_York"
+pve_filesystem: "ext4"
+pve_disk_list: ["sda"]
+pve_root_password: "REPLACE_IN_DEPLOYMENT"

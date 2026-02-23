@@ -1,0 +1,19 @@
+---
+- name: Verify network bridges exist
+  ansible.builtin.shell: |
+    cat /etc/network/interfaces | grep -c "iface {{ item.name }}" || echo 0
+  register: bridge_check
+  loop: "{{ pve_network_bridges | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+  changed_when: false
+  check_mode: false
+
+- name: Display network bridge status
+  ansible.builtin.debug:
+    msg: >-
+      Bridge {{ item.item.name }}: {{ 'exists' if item.stdout | int > 0 else 'MISSING' }}
+      ({{ item.item.comment | default('no description') }})
+  loop: "{{ bridge_check.results }}"
+  loop_control:
+    label: "{{ item.item.name }}"

@@ -1,0 +1,16 @@
+---
+- name: reboot for bios changes
+  ansible.builtin.uri:
+    url: "https://{{ ilo_host }}/redfish/v1/Systems/1/Actions/ComputerSystem.Reset"
+    method: POST
+    url_username: "{{ ilo_user }}"
+    url_password: "{{ ilo_pass }}"
+    force_basic_auth: true
+    validate_certs: false
+    body_format: json
+    body:
+      ResetType: ForceRestart
+    status_code:
+      - 200
+      - 204
+  delegate_to: localhost

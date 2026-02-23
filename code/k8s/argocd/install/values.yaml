@@ -1,0 +1,101 @@
+---
+# ArgoCD Helm Values
+# Chart: argo/argo-cd
+# Purpose: GitOps controller for all SDLC application deployments
+# Ingress: argocd.apps.home.lab via Traefik with self-signed TLS
+#
+# NOTE: This file is no longer applied directly. The Ansible playbook
+# templates code/ansible/templates/argocd-install-values.yaml.j2 with
+# domain variables and uses the rendered output for Helm install.
+# This file is preserved as documentation of the default values.
+
+## Global settings
+global:
+  domain: argocd.apps.home.lab
+
+## Server configuration
+server:
+  # Run insecure — TLS is terminated at the Traefik ingress
+  extraArgs:
+    - --insecure
+
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    annotations:
+      cert-manager.io/cluster-issuer: selfsigned-issuer
+      traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    hosts:
+      - argocd.apps.home.lab
+    tls:
+      - secretName: argocd-server-tls
+        hosts:
+          - argocd.apps.home.lab
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+## Controller configuration
+controller:
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+## Repo server configuration
+repoServer:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+## ApplicationSet controller
+applicationSet:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+## Notifications controller
+notifications:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+## Redis (bundled)
+redis:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+## Resource tracking method
+## annotation+label provides best compatibility and visibility
+configs:
+  params:
+    server.insecure: true
+  cm:
+    resource.tracking.method: annotation+label
+    # Timeout for application sync operations
+    timeout.reconciliation: 180s

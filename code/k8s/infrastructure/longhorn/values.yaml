@@ -1,0 +1,62 @@
+---
+# Longhorn Helm values for home lab k3s cluster
+# Chart: longhorn/longhorn
+# Namespace: longhorn-system
+#
+# NOTE: Domain-specific values below are defaults for apps.home.lab.
+# Actual domain is overridden via ArgoCD Application helm values
+# configured by Ansible (see code/ansible/templates/argocd-apps/).
+#
+# Distributed block storage across 2 agent nodes.
+# Default StorageClass for all PVC requests.
+
+# Persistence settings
+persistence:
+  # Set Longhorn as the default StorageClass
+  defaultClass: true
+  # 2 replicas for 2 agent nodes (data availability)
+  defaultClassReplicaCount: 2
+  # Default filesystem type
+  defaultFsType: ext4
+
+# Default data path on each node
+defaultSettings:
+  # Where Longhorn stores replica data on host filesystem
+  defaultDataPath: /var/lib/longhorn
+  # Number of replicas for new volumes
+  defaultReplicaCount: 2
+  # Guarantee scheduling on nodes with available storage
+  storageOverProvisioningPercentage: 100
+  storageMinimalAvailablePercentage: 15
+  # Auto-delete workload pods when a volume is detached unexpectedly
+  autoDeletePodWhenVolumeDetachedUnexpectedly: true
+  # Node drain policy for k3s maintenance
+  nodeDrainPolicy: block-for-eviction
+  # S3 backup target — DL360g9 NAS (MinIO gateway or TrueNAS S3 service)
+  # Endpoint URL is embedded in the credential secret (AWS_ENDPOINTS)
+  backupTarget: "s3://longhorn-backups@us-east-1/"
+  backupTargetCredentialSecret: longhorn-backup-credentials
+
+# Longhorn UI ingress (disabled by default for security)
+# Enable manually if needed: helm upgrade --set ingress.enabled=true
+ingress:
+  enabled: false
+  # Uncomment below to expose the UI
+  # host: longhorn.apps.home.lab
+  # ingressClassName: traefik
+  # tls: true
+  # tlsSecret: longhorn-tls
+
+# Longhorn manager
+longhornManager:
+  # Log level for troubleshooting
+  log:
+    level: warn
+
+# CSI driver settings
+csi:
+  # Attach/detach timeout
+  attacherReplicaCount: 1
+  provisionerReplicaCount: 1
+  resizerReplicaCount: 1
+  snapshotterReplicaCount: 1

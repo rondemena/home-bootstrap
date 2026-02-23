@@ -1,0 +1,24 @@
+---
+# Playbook: Proxmox VE Host Configuration
+# Target: proxmox group
+# Purpose: Configure storage, networking, repos, and API tokens
+#
+# Usage: make configure-proxmox
+
+- name: Configure Proxmox VE Host
+  hosts: proxmox
+  gather_facts: true
+
+  pre_tasks:
+    - name: Verify Proxmox VE is installed
+      ansible.builtin.command:
+        cmd: pveversion
+      register: pve_version
+      changed_when: false
+
+    - name: Display Proxmox version
+      ansible.builtin.debug:
+        msg: "Proxmox VE: {{ pve_version.stdout }}"
+
+  roles:
+    - role: proxmox_configure

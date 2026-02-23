@@ -1,0 +1,73 @@
+---
+# ArgoCD Application: Gitea
+# Stack: Secondary — lightweight source control for learning
+# Chart: gitea-charts/gitea ~10.0
+# Ingress: gitea.apps.home.lab
+#
+# NOTE: This file is no longer applied directly. The Ansible playbook
+# templates code/ansible/templates/argocd-apps/gitea.yaml.j2 with
+# domain variables and applies the rendered output via kubectl.
+# This file is preserved as documentation of the default values.
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gitea
+  namespace: argocd
+  annotations:
+    stack: secondary
+  labels:
+    app.kubernetes.io/part-of: sdlc
+    stack: secondary
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://dl.gitea.com/charts/
+    chart: gitea
+    targetRevision: "~10.0"
+    helm:
+      valueFiles: []
+      values: |
+        ingress:
+          enabled: true
+          className: traefik
+          annotations:
+            cert-manager.io/cluster-issuer: selfsigned-issuer
+          hosts:
+            - host: gitea.apps.home.lab
+              paths:
+                - path: /
+                  pathType: Prefix
+          tls:
+            - secretName: gitea-tls
+              hosts:
+                - gitea.apps.home.lab
+        persistence:
+          enabled: true
+          storageClass: longhorn
+          size: 10Gi
+        gitea:
+          config:
+            database:
+              DB_TYPE: sqlite3
+            server:
+              DOMAIN: gitea.apps.home.lab
+              ROOT_URL: https://gitea.apps.home.lab
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: gitea
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

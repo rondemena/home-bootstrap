@@ -1,0 +1,81 @@
+---
+- name: Check if k3s agent is already installed
+  ansible.builtin.stat:
+    path: /usr/local/bin/k3s
+  register: k3s_agent_binary
+  tags:
+    - k3s-agent
+
+- name: Get current k3s agent version
+  ansible.builtin.command:
+    cmd: k3s --version
+  register: k3s_agent_current_version
+  changed_when: false
+  failed_when: false
+  when: k3s_agent_binary.stat.exists
+  tags:
+    - k3s-agent
+
+- name: Determine if k3s agent installation is needed
+  ansible.builtin.set_fact:
+    k3s_agent_install_needed: >-
+      {{
+        not k3s_agent_binary.stat.exists or
+        (k3s_agent_current_version.stdout is defined and
+         k3s_version not in (k3s_agent_current_version.stdout | default('')))
+      }}
+  tags:
+    - k3s-agent
+
+- name: Display k3s agent installation status
+  ansible.builtin.debug:
+    msg: >-
+      k3s agent installed: {{ k3s_agent_binary.stat.exists }},
+      version match: {{ not k3s_agent_install_needed }},
+      target version: {{ k3s_version }}
+  tags:
+    - k3s-agent
+
+- name: Download k3s install script
+  ansible.builtin.get_url:
+    url: "{{ k3s_install_script }}"
+    dest: /tmp/k3s-install.sh
+    mode: "0755"
+    force: true
+  when: k3s_agent_install_needed | bool
+  tags:
+    - k3s-agent
+
+- name: Install k3s agent
+  ansible.builtin.command:
+    cmd: /tmp/k3s-install.sh
+  environment:
+    INSTALL_K3S_VERSION: "{{ k3s_version }}"
+    INSTALL_K3S_EXEC: "agent {{ k3s_agent_args | join(' ') }}"
+    K3S_URL: "{{ k3s_server_url }}"
+    K3S_TOKEN: "{{ k3s_node_token }}"
+  register: k3s_agent_install
+  changed_when: k3s_agent_install.rc == 0
+  when: k3s_agent_install_needed | bool
+  tags:
+    - k3s-agent
+
+- name: Ensure k3s-agent service is enabled
+  ansible.builtin.systemd:
+    name: k3s-agent
+    enabled: true
+    state: started
+  tags:
+    - k3s-agent
+
+- name: Wait for k3s agent to join cluster
+  ansible.builtin.command:
+    cmd: k3s kubectl get nodes
+  delegate_to: "{{ groups['k3s_server'][0] }}"
+  register: k3s_node_list
+  retries: "{{ k3s_agent_join_retries }}"
+  delay: "{{ k3s_agent_join_delay }}"
+  until: inventory_hostname in k3s_node_list.stdout
+  changed_when: false
+  tags:
+    - k3s-agent

@@ -1,0 +1,18 @@
+---
+# Proxmox VE host configuration
+# Idempotent: checks state before making changes
+
+- name: Configure Proxmox repositories
+  ansible.builtin.include_tasks: repositories.yml
+
+- name: Configure storage pools
+  ansible.builtin.include_tasks: storage.yml
+
+- name: Configure network bridges
+  ansible.builtin.include_tasks: network.yml
+
+- name: Configure API access for automation
+  ansible.builtin.include_tasks: api_token.yml
+
+- name: Enable snippets storage
+  ansible.builtin.include_tasks: snippets.yml

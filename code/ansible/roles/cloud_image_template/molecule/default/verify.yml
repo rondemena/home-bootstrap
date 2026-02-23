@@ -1,0 +1,15 @@
+---
+- name: Verify
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Check defaults exist
+      ansible.builtin.stat:
+        path: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}/defaults/main.yml"
+      register: defaults_file
+      delegate_to: localhost
+
+    - name: Assert defaults present
+      ansible.builtin.assert:
+        that: defaults_file.stat.exists
+        fail_msg: "cloud_image_template defaults/main.yml not found"

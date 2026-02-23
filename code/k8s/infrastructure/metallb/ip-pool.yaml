@@ -1,0 +1,29 @@
+---
+# MetalLB IPAddressPool and L2Advertisement for home lab
+# Applied after MetalLB Helm release is ready
+# Pool: 192.168.2.240-192.168.2.250 on VLAN 2 (lab-routed)
+#
+# L2 mode: MetalLB responds to ARP requests for service IPs
+# on the local network. No BGP configuration needed for home use.
+
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: home-lab-pool
+  namespace: metallb-system
+spec:
+  addresses:
+    - 192.168.2.240-192.168.2.250
+  # Automatically assign IPs from this pool to LoadBalancer Services
+  autoAssign: true
+
+---
+apiVersion: metallb.io/v1beta1
+kind: L2Advertisement
+metadata:
+  name: home-lab-l2
+  namespace: metallb-system
+spec:
+  # Advertise all pools (only one in this setup)
+  ipAddressPools:
+    - home-lab-pool

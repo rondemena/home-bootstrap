@@ -1,0 +1,97 @@
+---
+# Playbook: k3s Post-Install - Infrastructure Services
+# Target: localhost (uses kubeconfig from 03-k3s-install.yml)
+# Purpose: Deploy MetalLB, Longhorn, cert-manager, and Sealed Secrets via Helm
+#
+# Usage:
+#   make deploy-infra
+#   ansible-playbook -i inventory/hosts.yml playbooks/04-k3s-post-install.yml
+#
+# Prerequisites:
+#   - k3s cluster running (03-k3s-install.yml completed)
+#   - kubeconfig at ~/.kube/config pointing to k3s-server-01
+#   - helm CLI installed on workstation
+#
+# Idempotency:
+#   - Uses "helm upgrade --install" pattern (idempotent)
+#   - Kubernetes manifests applied with "kubectl apply" (idempotent)
+#   - Each wait step validates deployment before proceeding
+#
+# Tags:
+#   helm-repos     - Add/update Helm repositories
+#   metallb        - Deploy MetalLB + IP pool
+#   longhorn       - Deploy Longhorn storage
+#   cert-manager   - Deploy cert-manager + ClusterIssuer
+#   sealed-secrets - Deploy Sealed Secrets controller
+
+- name: Deploy k3s Infrastructure Services
+  hosts: localhost
+  connection: local
+  gather_facts: true
+
+  environment:
+    KUBECONFIG: "{{ kubeconfig_path }}"
+
+  pre_tasks:
+    - name: Verify kubeconfig exists
+      ansible.builtin.stat:
+        path: "{{ kubeconfig_path }}"
+      register: kubeconfig_file
+      tags:
+        - always
+
+    - name: Fail if kubeconfig is missing
+      ansible.builtin.assert:
+        that:
+          - kubeconfig_file.stat.exists
+        fail_msg: >-
+          Kubeconfig not found at {{ kubeconfig_path }}.
+          Run 03-k3s-install.yml first to fetch the kubeconfig.
+      tags:
+        - always
+
+    - name: Verify kubectl can connect to cluster
+      ansible.builtin.command:
+        cmd: kubectl cluster-info
+      register: cluster_info
+      changed_when: false
+      tags:
+        - always
+
+    - name: Verify helm is installed
+      ansible.builtin.command:
+        cmd: helm version --short
+      register: helm_version
+      changed_when: false
+      tags:
+        - always
+
+    - name: Display cluster connection info
+      ansible.builtin.debug:
+        msg:
+          - "Kubectl: {{ cluster_info.stdout_lines[0] | default('connected') }}"
+          - "Helm: {{ helm_version.stdout }}"
+      tags:
+        - always
+
+  roles:
+    - role: k3s_post_install
+
+  post_tasks:
+    - name: Display infrastructure deployment summary
+      ansible.builtin.debug:
+        msg:
+          - "=========================================="
+          - "  Infrastructure Services Deployed"
+          - "=========================================="
+          - "  MetalLB:         metallb-system  (IP pool: {{ metallb_ip_range | default('see ip-pool.yaml') }})"
+          - "  Longhorn:        longhorn-system (replicas: 2, default SC)"
+          - "  cert-manager:    cert-manager    (self-signed ClusterIssuer)"
+          - "  Sealed Secrets:  kube-system     (controller ready)"
+          - "=========================================="
+          - ""
+          - "  Next steps:"
+          - "    make test-infra    # Validate infrastructure services"
+          - "    make deploy-apps   # Deploy SDLC applications"
+      tags:
+        - always

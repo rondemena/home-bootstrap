@@ -1,0 +1,11 @@
+---
+# =============================================================================
+# iLO Target Variables
+# =============================================================================
+
+# Proxmox ISO URL — operator must serve ISO on local network before provisioning
+proxmox_iso_url: "{{ lookup('env', 'PROXMOX_ISO_URL') | default('http://fileserver.' + domain + '/proxmox-ve_8.3-1.iso', true) }}"
+
+# Network subnet mapping for iLO → Proxmox IP derivation
+ilo_mgmt_subnet: "192.168.5"
+pve_mgmt_subnet: "192.168.2"

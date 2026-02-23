@@ -1,0 +1,19 @@
+---
+dependency:
+  name: galaxy
+driver:
+  name: default
+platforms:
+  - name: cloud-template-test
+    image: "geerlingguy/docker-debian12-ansible:latest"
+    pre_build_image: true
+    privileged: true
+provisioner:
+  name: ansible
+  inventory:
+    host_vars:
+      cloud-template-test:
+        cloud_image_url: "https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img"
+        template_vmid: 9000
+verifier:
+  name: ansible

@@ -1,0 +1,19 @@
+---
+# Lint validation test for iLO provisioning playbook
+# Run: ansible-lint code/ansible/playbooks/00-ilo-provision.yml
+# This file documents the expected lint targets for CI
+
+- name: "Lint target: iLO provisioning playbook"
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Verify iLO playbook exists
+      ansible.builtin.stat:
+        path: "{{ playbook_dir }}/../../code/ansible/playbooks/00-ilo-provision.yml"
+      register: ilo_playbook
+
+    - name: Assert iLO playbook is present
+      ansible.builtin.assert:
+        that:
+          - ilo_playbook.stat.exists
+        fail_msg: "iLO provisioning playbook not found"

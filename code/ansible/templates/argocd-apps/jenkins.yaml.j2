@@ -1,0 +1,56 @@
+---
+# ArgoCD Application: Jenkins
+# Stack: Primary — CI/CD pipeline engine
+# Chart: jenkins/jenkins ~5.0
+# Ingress: jenkins.{{ ingress_domain }}
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: jenkins
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: sdlc
+    stack: primary
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://charts.jenkins.io
+    chart: jenkins
+    targetRevision: "~5.0"
+    helm:
+      valueFiles: []
+      values: |
+        controller:
+          ingress:
+            enabled: true
+            ingressClassName: traefik
+            annotations:
+              cert-manager.io/cluster-issuer: selfsigned-issuer
+            hostName: jenkins.{{ ingress_domain }}
+            tls:
+              - secretName: jenkins-tls
+                hosts:
+                  - jenkins.{{ ingress_domain }}
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+        persistence:
+          enabled: true
+          storageClass: longhorn
+          size: 20Gi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: jenkins
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

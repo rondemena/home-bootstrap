@@ -1,0 +1,66 @@
+---
+# Cloud-init template creation
+# Idempotent: skips if template VMID already exists
+
+- name: Check if cloud-init template already exists
+  ansible.builtin.command:
+    cmd: "qm status {{ template_vmid }}"
+  register: template_status
+  changed_when: false
+  failed_when: false
+
+- name: Skip if template already exists
+  when: template_status.rc == 0
+  block:
+    - name: Template already exists
+      ansible.builtin.debug:
+        msg: "Cloud-init template VMID {{ template_vmid }} already exists. Skipping."
+
+    - name: End template creation
+      ansible.builtin.meta: end_play
+
+- name: Download cloud image
+  ansible.builtin.get_url:
+    url: "{{ cloud_image_url }}"
+    dest: "{{ cloud_image_dest }}/{{ cloud_image_filename }}"
+    checksum: "{{ cloud_image_checksum }}"
+    mode: "0644"
+
+- name: Create VM shell for template
+  ansible.builtin.command:
+    cmd: >-
+      qm create {{ template_vmid }}
+      --name {{ template_name }}
+      --memory {{ template_memory }}
+      --cores {{ template_cores }}
+      --net0 virtio,bridge={{ template_bridge }}
+      --ostype l26
+      --serial0 socket
+      --vga serial0
+  register: vm_created
+
+- name: Import cloud image as disk
+  ansible.builtin.command:
+    cmd: >-
+      qm set {{ template_vmid }}
+      --scsi0 {{ template_storage }}:0,import-from={{ cloud_image_dest }}/{{ cloud_image_filename }}
+  when: vm_created is changed
+
+- name: Configure boot and cloud-init drive
+  ansible.builtin.command:
+    cmd: >-
+      qm set {{ template_vmid }}
+      --ide2 {{ template_storage }}:cloudinit
+      --boot order=scsi0
+      --scsihw virtio-scsi-single
+      --agent enabled=1
+  when: vm_created is changed
+
+- name: Convert VM to template
+  ansible.builtin.command:
+    cmd: "qm template {{ template_vmid }}"
+  when: vm_created is changed
+
+- name: Display template info
+  ansible.builtin.debug:
+    msg: "Cloud-init template created: VMID {{ template_vmid }} ({{ template_name }})"

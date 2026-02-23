@@ -1,0 +1,40 @@
+---
+# Playbook: iLO Server Provisioning
+# Target: ilo_targets group
+# Purpose: Configure BIOS and install Proxmox VE via iLO Redfish API
+#
+# Usage:
+#   make provision-server HOST=192.168.5.11  (single host)
+#   ansible-playbook -i inventory/hosts.yml playbooks/00-ilo-provision.yml  (all targets)
+#
+# Idempotency:
+#   - Skips hosts with proxmox_already_installed: true
+#   - BIOS changes only applied if current settings differ
+#   - Virtual media only mounted if Proxmox API is not already reachable
+
+- name: iLO Server Provisioning
+  hosts: "{{ target_host | default('ilo_targets') }}"
+  gather_facts: false
+  connection: local
+
+  vars:
+    ilo_pass: "{{ lookup('env', 'ILO_PASS') | default(hostvars[inventory_hostname].ilo_pass | default(''), true) }}"
+
+  pre_tasks:
+    - name: Validate required variables
+      ansible.builtin.assert:
+        that:
+          - ilo_host is defined
+          - ilo_user is defined
+          - ilo_version is defined
+          - ilo_pass | length > 0
+        fail_msg: "Missing required iLO variables. Check inventory and secrets."
+
+    - name: Validate iLO version is supported
+      ansible.builtin.assert:
+        that:
+          - ilo_version in ['ilo4', 'ilo5', 'ilo6']
+        fail_msg: "Unsupported iLO version: {{ ilo_version }}. Supported: ilo4, ilo5, ilo6"
+
+  roles:
+    - role: ilo_provision

@@ -1,0 +1,249 @@
+# =============================================================================
+# GitLab CE Helm Values
+# Chart: gitlab/gitlab
+# Repository: https://charts.gitlab.io/
+# Task: T059 - Primary SDLC stack: source control + project management
+# =============================================================================
+#
+# NOTE: Domain-specific values below are defaults for apps.home.lab.
+# Actual domain is overridden via ArgoCD Application helm values
+# configured by Ansible (see code/ansible/templates/argocd-apps/).
+#
+# Deployment notes:
+#   - GitLab CE edition (MIT license) - no EE features
+#   - Ingress handled by cluster Traefik (built-in nginx disabled)
+#   - TLS handled by cluster cert-manager (built-in cert-manager disabled)
+#   - Container registry disabled (Harbor used instead)
+#   - Persistence via Longhorn StorageClass
+#   - Agent nodes have 64GB RAM each; resource requests are generous
+# =============================================================================
+
+# -- Global configuration shared across all GitLab subcharts
+global:
+  # -- CE edition only (MIT licensed)
+  edition: ce
+
+  # -- Top-level domain and host configuration
+  hosts:
+    domain: apps.home.lab
+    https: true
+    gitlab:
+      name: gitlab.apps.home.lab
+      https: true
+    # -- Disable registry host (Harbor handles container registry)
+    registry:
+      name: ""
+    minio:
+      name: minio-gitlab.apps.home.lab
+      https: true
+
+  # -- Ingress: use cluster Traefik instead of bundled nginx
+  ingress:
+    # -- GitLab chart ingress class for Traefik
+    class: traefik
+    # -- TLS configuration via cert-manager annotation
+    annotations:
+      cert-manager.io/cluster-issuer: selfsigned-issuer
+      traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    configureCertmanager: false
+    enabled: true
+    tls:
+      enabled: true
+
+  # -- Initial root password configuration
+  # Option 1: Reference a pre-created Sealed Secret
+  # Option 2: Let GitLab generate one and store in a k8s secret
+  initialRootPassword:
+    # -- Pre-created secret name containing the root password
+    # Create with: kubectl create secret generic gitlab-root-password \
+    #   --from-literal=password=<your-password> -n gitlab
+    # Then seal with kubeseal
+    secret: gitlab-root-password
+    key: password
+
+  # -- cert-manager issuer email for ACME (used in annotations)
+  certmanager-issuer:
+    email: admin@home.lab
+
+  # -- Time zone for all GitLab components
+  time_zone: UTC
+
+  # -- Default storage class for all persistence
+  defaultStorageClass: longhorn
+
+  # -- Application-wide configuration
+  appConfig:
+    # -- Disable features not needed for home lab
+    enableUsagePing: false
+    enableSeatLink: false
+
+    # -- Object storage for LFS, artifacts, uploads, packages
+    # Using internal MinIO (deployed as GitLab subchart)
+    lfs:
+      enabled: true
+    artifacts:
+      enabled: true
+    uploads:
+      enabled: true
+    packages:
+      enabled: true
+
+  # -- Disable built-in container registry (Harbor used instead)
+  registry:
+    enabled: false
+
+# -- cert-manager: disabled, using cluster-level cert-manager
+certmanager:
+  install: false
+
+# -- NGINX ingress controller: disabled, using cluster Traefik
+nginx-ingress:
+  enabled: false
+
+# -- Prometheus: disabled, using cluster-level kube-prometheus-stack
+prometheus:
+  install: false
+
+# -- GitLab Runner: disabled for now (Jenkins handles CI/CD)
+gitlab-runner:
+  install: false
+
+# -- Registry subchart: disabled (Harbor used instead)
+registry:
+  enabled: false
+
+# =============================================================================
+# GitLab Core Components
+# =============================================================================
+
+# -- Webservice (Rails frontend)
+gitlab:
+  webservice:
+    # -- Resource allocation for the Rails app
+    resources:
+      requests:
+        cpu: "1"
+        memory: 4Gi
+      limits:
+        cpu: "4"
+        memory: 8Gi
+    # -- Number of Puma workers (reduce for home lab)
+    workerProcesses: 2
+    minReplicas: 1
+    maxReplicas: 2
+
+  # -- Sidekiq (background job processor)
+  sidekiq:
+    resources:
+      requests:
+        cpu: 500m
+        memory: 2Gi
+      limits:
+        cpu: "2"
+        memory: 4Gi
+    minReplicas: 1
+    maxReplicas: 2
+
+  # -- Gitaly (Git RPC service for repository access)
+  gitaly:
+    persistence:
+      storageClass: longhorn
+      size: 50Gi
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: "2"
+        memory: 4Gi
+
+  # -- GitLab Shell (SSH access to repositories)
+  gitlab-shell:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+
+  # -- Toolbox (backup/restore utilities)
+  toolbox:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+  # -- GitLab Exporter (Prometheus metrics)
+  gitlab-exporter:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 250m
+        memory: 128Mi
+
+  # -- KAS (Kubernetes Agent Server): disabled
+  kas:
+    enabled: false
+
+  # -- GitLab Pages: disabled (not needed for home lab)
+  gitlab-pages:
+    enabled: false
+
+  # -- Migrations job
+  migrations:
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: "1"
+        memory: 2Gi
+
+# =============================================================================
+# Data Services (subcharts)
+# =============================================================================
+
+# -- PostgreSQL (GitLab database)
+postgresql:
+  persistence:
+    storageClass: longhorn
+    size: 10Gi
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+
+# -- Redis (caching and queues)
+redis:
+  persistence:
+    storageClass: longhorn
+    size: 5Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+# -- MinIO (internal object storage for GitLab artifacts/LFS/uploads)
+minio:
+  persistence:
+    storageClass: longhorn
+    size: 20Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi

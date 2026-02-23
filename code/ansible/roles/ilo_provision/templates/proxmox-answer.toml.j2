@@ -1,0 +1,21 @@
+# Proxmox VE automated installation answer file
+# See: https://pve.proxmox.com/wiki/Automated_Installation
+# Rendered by Ansible from proxmox-answer.toml.j2
+
+[global]
+keyboard = "en-us"
+country = "us"
+fqdn = "{{ pve_hostname | default(inventory_hostname) }}.{{ domain | default('home.lab') }}"
+mailto = "{{ pve_admin_email | default('admin@' + (domain | default('home.lab'))) }}"
+timezone = "{{ pve_timezone | default('America/New_York') }}"
+root_password = "{{ pve_root_password | default('REPLACE_IN_DEPLOYMENT') }}"
+
+[network]
+source = "from-answer"
+cidr = "{{ pve_mgmt_ip }}"
+dns = "{{ pve_dns_server }}"
+gateway = "{{ pve_gateway }}"
+
+[disk-setup]
+filesystem = "{{ pve_filesystem | default('ext4') }}"
+disk_list = {{ pve_disk_list | default(["sda"]) | to_json }}

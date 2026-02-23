@@ -1,0 +1,12 @@
+---
+galaxy_info:
+  role_name: proxmox_configure
+  author: home-bootstrap
+  description: Configure Proxmox VE host (repos, storage, network, API tokens)
+  license: Apache-2.0
+  min_ansible_version: "2.16"
+  platforms:
+    - name: Debian
+      versions:
+        - bookworm
+dependencies: []

@@ -1,0 +1,41 @@
+---
+- name: Check if automation user exists
+  ansible.builtin.command:
+    cmd: "pveum user list --output-format json"
+  register: pve_users
+  changed_when: false
+  check_mode: false
+
+- name: Create automation user if not exists
+  ansible.builtin.command:
+    cmd: "pveum user add {{ pve_automation_user }}"
+  when: pve_automation_user not in (pve_users.stdout | from_json | map(attribute='userid') | list)
+  register: user_created
+
+- name: Grant automation user PVEAdmin role
+  ansible.builtin.command:
+    cmd: "pveum acl modify / -user {{ pve_automation_user }} -role PVEAdmin"
+  when: user_created is changed
+
+- name: Check if API token exists
+  ansible.builtin.command:
+    cmd: "pveum user token list {{ pve_automation_user }} --output-format json"
+  register: pve_tokens
+  changed_when: false
+  check_mode: false
+  failed_when: false
+
+- name: Create API token for OpenTofu
+  ansible.builtin.command:
+    cmd: "pveum user token add {{ pve_automation_user }} {{ pve_automation_token_id }} --privsep 0"
+  register: token_created
+  when: >-
+    pve_tokens.rc != 0 or
+    pve_automation_token_id not in (pve_tokens.stdout | default('[]') | from_json | map(attribute='tokenid') | list | default([]))
+
+- name: Display API token (save this!)
+  ansible.builtin.debug:
+    msg: >-
+      API token created: {{ token_created.stdout | default('check pveum output') }}
+      IMPORTANT: Save this token securely — it cannot be retrieved again!
+  when: token_created is changed

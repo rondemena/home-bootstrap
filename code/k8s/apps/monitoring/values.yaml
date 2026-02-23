@@ -1,0 +1,398 @@
+# =============================================================================
+# Monitoring Stack Helm Values (kube-prometheus-stack)
+# Chart: prometheus-community/kube-prometheus-stack
+# Repository: https://prometheus-community.github.io/helm-charts
+# Task: T064 - Observability: metrics, dashboards, alerting
+# =============================================================================
+#
+# NOTE: Domain-specific values below are defaults for apps.home.lab.
+# Actual domain is overridden via ArgoCD Application helm values
+# configured by Ansible (see code/ansible/templates/argocd-apps/).
+#
+# Deployment notes:
+#   - Prometheus with 30-day retention
+#   - Grafana with ingress at grafana.apps.home.lab
+#   - Alertmanager with dead man's switch and infrastructure alerts
+#   - ServiceMonitors for ArgoCD, cert-manager, Longhorn
+#   - Node exporter and kube-state-metrics enabled
+#   - Loki datasource added to Grafana for log correlation
+# =============================================================================
+
+# =============================================================================
+# Grafana
+# =============================================================================
+grafana:
+  # -- Enable Grafana deployment
+  enabled: true
+
+  # -- Admin credentials
+  # Override with a sealed secret in production:
+  #   kubectl create secret generic grafana-admin \
+  #     --from-literal=admin-user=admin \
+  #     --from-literal=admin-password=<password> -n monitoring
+  adminUser: admin
+  adminPassword: admin
+
+  # -- Ingress via Traefik
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    annotations:
+      cert-manager.io/cluster-issuer: selfsigned-issuer
+      traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    hosts:
+      - grafana.apps.home.lab
+    tls:
+      - secretName: grafana-tls
+        hosts:
+          - grafana.apps.home.lab
+
+  # -- Persistence for Grafana database and dashboards
+  persistence:
+    enabled: true
+    storageClassName: longhorn
+    size: 5Gi
+    accessModes:
+      - ReadWriteOnce
+
+  # -- Additional datasources (Loki for log correlation)
+  additionalDataSources:
+    - name: Loki
+      type: loki
+      url: http://loki.logging.svc.cluster.local:3100
+      access: proxy
+      isDefault: false
+      jsonData:
+        maxLines: 1000
+
+  # -- Sidecar for automatic dashboard discovery from ConfigMaps
+  sidecar:
+    dashboards:
+      enabled: true
+      # -- Label that ConfigMaps must have to be picked up
+      label: grafana_dashboard
+      # -- Search all namespaces for dashboard ConfigMaps
+      searchNamespace: ALL
+      folderAnnotation: grafana_folder
+      provider:
+        foldersFromFilesStructure: true
+    datasources:
+      enabled: true
+      label: grafana_datasource
+
+  # -- Resource allocation
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+# =============================================================================
+# Prometheus
+# =============================================================================
+prometheus:
+  # -- Enable Prometheus deployment
+  enabled: true
+
+  # -- Ingress via Traefik
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    annotations:
+      cert-manager.io/cluster-issuer: selfsigned-issuer
+      traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    hosts:
+      - prometheus.apps.home.lab
+    tls:
+      - secretName: prometheus-tls
+        hosts:
+          - prometheus.apps.home.lab
+
+  prometheusSpec:
+    # -- Data retention period
+    retention: 30d
+
+    # -- Persistent storage for metrics data
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: longhorn
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 50Gi
+
+    # -- Resource allocation
+    resources:
+      requests:
+        cpu: 500m
+        memory: 2Gi
+      limits:
+        cpu: "2"
+        memory: 4Gi
+
+    # -- Scrape configuration
+    # Pick up ServiceMonitors from all namespaces
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+
+    # -- Additional scrape configs for services without ServiceMonitors
+    additionalScrapeConfigs: []
+
+# =============================================================================
+# Alertmanager
+# =============================================================================
+alertmanager:
+  enabled: true
+
+  # -- Ingress via Traefik
+  ingress:
+    enabled: true
+    ingressClassName: traefik
+    annotations:
+      cert-manager.io/cluster-issuer: selfsigned-issuer
+      traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    hosts:
+      - alertmanager.apps.home.lab
+    tls:
+      - secretName: alertmanager-tls
+        hosts:
+          - alertmanager.apps.home.lab
+
+  alertmanagerSpec:
+    # -- Persistent storage for silences and notification state
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: longhorn
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 1Gi
+
+    # -- Resource allocation
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+
+  # -- Alertmanager configuration
+  config:
+    global:
+      resolve_timeout: 5m
+
+    # -- Route tree: critical/warning alerts go to webhook receiver,
+    # Watchdog (dead man's switch) goes to null.
+    route:
+      group_by:
+        - namespace
+        - alertname
+        - severity
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 12h
+      receiver: webhook
+      routes:
+        # -- Dead man's switch: always-firing alert to verify pipeline
+        - match:
+            alertname: Watchdog
+          receiver: "null"
+          repeat_interval: 1m
+
+    receivers:
+      # -- Null receiver (Watchdog only)
+      - name: "null"
+      # -- Webhook receiver for alert notifications
+      # Configure ALERTMANAGER_WEBHOOK_URL via Sealed Secret or update
+      # the URL below. Compatible with: ntfy, Gotify, Slack incoming
+      # webhooks, or any HTTP endpoint accepting Alertmanager payloads.
+      # Default: ntfy topic at ntfy.apps.home.lab/alerts (deploy ntfy
+      # as a lightweight k8s service, or use https://ntfy.sh/your-topic)
+      - name: webhook
+        webhook_configs:
+          - url: "http://ntfy.apps.home.lab/alerts"
+            send_resolved: true
+            max_alerts: 10
+
+    # -- Inhibition rules to reduce alert noise
+    inhibit_rules:
+      # -- If a critical alert fires, suppress warnings for the same
+      #    alertname and namespace
+      - source_matchers:
+          - severity = critical
+        target_matchers:
+          - severity = warning
+        equal:
+          - namespace
+          - alertname
+
+# =============================================================================
+# Custom Alerting Rules
+# =============================================================================
+additionalPrometheusRulesMap:
+  # -- Infrastructure health alerts
+  home-lab-alerts:
+    groups:
+      - name: node-health
+        rules:
+          # -- Dead man's switch (Watchdog)
+          # This alert should always be firing. If it stops, the
+          # alerting pipeline itself is broken.
+          - alert: Watchdog
+            expr: vector(1)
+            labels:
+              severity: none
+            annotations:
+              summary: "Dead man's switch - alerting pipeline is healthy"
+              description: >-
+                This is a dead man's switch alert. It should always be
+                firing. If this alert is not firing, the alerting
+                pipeline is broken.
+
+          # -- Node NotReady alert
+          - alert: NodeNotReady
+            expr: kube_node_status_condition{condition="Ready",status="true"} == 0
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Node {{ $labels.node }} is not ready"
+              description: >-
+                Kubernetes node {{ $labels.node }} has been in a
+                NotReady state for more than 5 minutes. This may
+                indicate the node is down or experiencing issues.
+
+      - name: pod-health
+        rules:
+          # -- Pod CrashLoopBackOff alert
+          - alert: PodCrashLoopBackOff
+            expr: >-
+              increase(kube_pod_container_status_restarts_total[15m]) > 3
+              and
+              kube_pod_container_status_waiting_reason{reason="CrashLoopBackOff"} == 1
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} is crash looping"
+              description: >-
+                Pod {{ $labels.namespace }}/{{ $labels.pod }} container
+                {{ $labels.container }} has restarted more than 3 times
+                in the last 15 minutes and is in CrashLoopBackOff.
+
+          # -- Pod not ready for extended period
+          - alert: PodNotReady
+            expr: >-
+              kube_pod_status_phase{phase=~"Pending|Unknown"} == 1
+            for: 15m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} is not ready"
+              description: >-
+                Pod {{ $labels.namespace }}/{{ $labels.pod }} has been
+                in {{ $labels.phase }} state for more than 15 minutes.
+
+# =============================================================================
+# ServiceMonitors for Infrastructure Components
+# =============================================================================
+
+# -- ServiceMonitor for ArgoCD
+# ArgoCD exposes metrics on its server, repo-server, and application
+# controller components.
+additionalServiceMonitors:
+  - name: argocd-metrics
+    namespace: monitoring
+    selector:
+      matchLabels:
+        app.kubernetes.io/part-of: argocd
+    namespaceSelector:
+      matchNames:
+        - argocd
+    endpoints:
+      - port: metrics
+        interval: 30s
+
+  - name: cert-manager-metrics
+    namespace: monitoring
+    selector:
+      matchLabels:
+        app.kubernetes.io/name: cert-manager
+    namespaceSelector:
+      matchNames:
+        - cert-manager
+    endpoints:
+      - port: http-metrics
+        interval: 60s
+
+  - name: longhorn-metrics
+    namespace: monitoring
+    selector:
+      matchLabels:
+        app: longhorn-manager
+    namespaceSelector:
+      matchNames:
+        - longhorn-system
+    endpoints:
+      - port: manager
+        interval: 30s
+
+# =============================================================================
+# Sub-chart Configuration
+# =============================================================================
+
+# -- Node exporter: enabled for host-level metrics (CPU, memory, disk, network)
+nodeExporter:
+  enabled: true
+
+# -- Prometheus Node Exporter subchart
+prometheus-node-exporter:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 32Mi
+    limits:
+      cpu: 200m
+      memory: 64Mi
+
+# -- kube-state-metrics: enabled for Kubernetes object metrics
+kubeStateMetrics:
+  enabled: true
+
+# -- kube-state-metrics subchart
+kube-state-metrics:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+# -- CoreDNS monitoring
+coreDns:
+  enabled: true
+
+# -- etcd monitoring (k3s uses embedded etcd/SQLite)
+kubeEtcd:
+  enabled: false
+
+# -- kube-proxy monitoring
+kubeProxy:
+  enabled: true
+
+# -- kube-scheduler monitoring
+kubeScheduler:
+  enabled: true
+
+# -- kube-controller-manager monitoring
+kubeControllerManager:
+  enabled: true

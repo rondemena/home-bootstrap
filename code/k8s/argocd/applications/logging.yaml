@@ -1,0 +1,65 @@
+---
+# ArgoCD Application: Logging (Loki Stack)
+# Stack: Primary — log aggregation with Promtail
+# Chart: grafana/loki-stack ~2.10
+# Ingress: loki.apps.home.lab
+#
+# NOTE: This file is no longer applied directly. The Ansible playbook
+# templates code/ansible/templates/argocd-apps/logging.yaml.j2 with
+# domain variables and applies the rendered output via kubectl.
+# This file is preserved as documentation of the default values.
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: logging
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: sdlc
+    stack: primary
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://grafana.github.io/helm-charts
+    chart: loki-stack
+    targetRevision: "~2.10"
+    helm:
+      valueFiles: []
+      values: |
+        loki:
+          enabled: true
+          persistence:
+            enabled: true
+            storageClassName: longhorn
+            size: 20Gi
+          config:
+            limits_config:
+              retention_period: 336h
+          ingress:
+            enabled: true
+            ingressClassName: traefik
+            annotations:
+              cert-manager.io/cluster-issuer: selfsigned-issuer
+            hosts:
+              - host: loki.apps.home.lab
+                paths:
+                  - /
+            tls:
+              - secretName: loki-tls
+                hosts:
+                  - loki.apps.home.lab
+        promtail:
+          enabled: true
+        grafana:
+          enabled: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: logging
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
